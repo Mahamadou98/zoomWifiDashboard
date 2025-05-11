@@ -13,6 +13,9 @@ export type Partner = {
   password: string;
   passwordConfirm: string;
   active?: boolean;
+  createdAt: string;
+  balance?: number;
+  pendingWithdrawal?: number;
 };
 
 export type PartnerResponse = {

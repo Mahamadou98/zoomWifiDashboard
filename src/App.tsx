@@ -1,5 +1,10 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Navigate,
+} from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { Dashboard } from './pages/Dashboard';
 import { Users } from './pages/Users';
@@ -13,7 +18,12 @@ import { LanguageProvider } from './contexts/LanguageContext';
 import { AlertProvider } from './contexts/AlertContext';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-  const { user } = useAuth();
+  const { user, isLoading } = useAuth();
+
+  if (isLoading) {
+    return <div>Loading...</div>; // Or a better loading indicator
+  }
+
   if (!user) return <Navigate to="/login" replace />;
   return <>{children}</>;
 };

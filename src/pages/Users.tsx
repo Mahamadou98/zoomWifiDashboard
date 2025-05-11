@@ -12,39 +12,8 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
-
-const mockUsers = [
-  {
-    id: 1,
-    name: 'Amadou Diallo',
-    phone: '+225 07 12 34 56',
-    email: 'amadou.d@email.com',
-    location: "Abidjan, Côte d'Ivoire",
-    status: 'active',
-    lastConnection: '2024-03-15 14:30',
-    balance: 25000,
-  },
-  {
-    id: 2,
-    name: 'Marie Koné',
-    phone: '+225 05 98 76 54',
-    email: 'marie.k@email.com',
-    location: "Bouaké, Côte d'Ivoire",
-    status: 'inactive',
-    lastConnection: '2024-03-14 09:15',
-    balance: 15000,
-  },
-  {
-    id: 3,
-    name: 'Ibrahim Touré',
-    phone: '+225 01 45 67 89',
-    email: 'ibrahim.t@email.com',
-    location: "Yamoussoukro, Côte d'Ivoire",
-    status: 'active',
-    lastConnection: '2024-03-15 16:45',
-    balance: 35000,
-  },
-];
+import userService, { Client } from '../services/userService';
+import transactionService from '../services/transactionService';
 
 const mockTransactions = [
   {
@@ -79,22 +48,24 @@ const mockTransactions = [
 export function Users() {
   const { t } = useLanguage();
   const [showHistoryModal, setShowHistoryModal] = useState(false);
-  const [showBlockModal, setShowBlockModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showBlockModal, setShowBlockModal] = useState(false);
   const [showRechargeModal, setShowRechargeModal] = useState(false);
   const [showFilterModal, setShowFilterModal] = useState(false);
-  const [selectedUser, setSelectedUser] = useState(null);
+  const [selectedUser, setSelectedUser] = useState<Client | null>();
   const [rechargeAmount, setRechargeAmount] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [showError, setShowError] = useState(false);
+  const [allUsers, setAllUsers] = useState<Client[]>([]);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState({
     status: 'all',
     city: 'all',
   });
-  const [filteredUsers, setFilteredUsers] = useState(mockUsers);
+  // const [filteredUsers, setFilteredUsers] = useState(mockUsers);
+  const [filteredUsers, setFilteredUsers] = useState<Client[]>([]);
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -104,31 +75,49 @@ export function Users() {
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
   const currentUsers = filteredUsers.slice(indexOfFirstItem, indexOfLastItem);
 
+  const fetchUsers = async () => {
+    try {
+      setIsProcessing(true);
+      const response = await userService.getAllClients();
+      setAllUsers(response.data.clients);
+      setFilteredUsers(response.data.clients);
+    } catch (err: any) {
+      // setErrorMessage(err.message || 'Failed to fetch partners');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   useEffect(() => {
-    let result = mockUsers;
+    let result = allUsers;
 
     if (searchTerm) {
       const searchLower = searchTerm.toLowerCase();
       result = result.filter(
         (user) =>
-          user.name.toLowerCase().includes(searchLower) ||
+          user.lastName.toLowerCase().includes(searchLower) ||
           user.phone.toLowerCase().includes(searchLower) ||
           user.email.toLowerCase().includes(searchLower)
       );
     }
 
     if (filters.status !== 'all') {
-      result = result.filter((user) => user.status === filters.status);
+      result = result.filter(
+        (user) => user.active === (filters.status === 'active')
+      );
     }
 
     if (filters.city !== 'all') {
-      result = result.filter((user) => user.location.includes(filters.city));
+      result = result.filter((user) => user.city === filters.city);
     }
 
     setFilteredUsers(result);
     setCurrentPage(1); // Reset to first page when filters change
   }, [searchTerm, filters]);
 
+  useEffect(() => {
+    fetchUsers();
+  }, []);
   const handleShowHistory = (user: any) => {
     setSelectedUser(user);
     setShowHistoryModal(true);
@@ -151,26 +140,82 @@ export function Users() {
 
   const handleBlock = async () => {
     try {
-      setShowBlockModal(false);
+      setIsProcessing(true);
+      const newStatus = !selectedUser?.active;
+      await userService.activateUser(selectedUser?._id!, newStatus);
+
+      //Update the local user status
+      const updatedUsers = allUsers.map((user) =>
+        user._id === selectedUser?._id ? { ...user, active: newStatus } : user
+      );
+
+      setAllUsers(updatedUsers);
+      setFilteredUsers(updatedUsers); // Reapply filters if needed
+      setShowSuccess(true);
+
+      setTimeout(() => {
+        setShowSuccess(false);
+        setShowBlockModal(false);
+        setSelectedUser(null);
+      }, 2000);
     } catch (error) {
       console.error('Error blocking user:', error);
+    } finally {
+      setIsProcessing(false);
     }
   };
 
   const handleDelete = async () => {
     try {
-      setShowDeleteModal(false);
+      setIsProcessing(true);
+
+      const response = await userService.deleteUser(selectedUser?._id!);
+      console.log('response:', response);
+
+      setAllUsers(allUsers.filter((user) => user._id !== selectedUser!._id));
+      setFilteredUsers(
+        filteredUsers.filter((user) => user._id !== selectedUser!._id)
+      );
+      setShowSuccess(true);
+
+      setTimeout(() => {
+        setShowSuccess(false);
+        setShowDeleteModal(false);
+        //setSelectedAdmin(null);
+      }, 2000);
     } catch (error) {
-      console.error('Error deleting user:', error);
+      // setErrorMessage('Une erreur est survenue lors de la suppression');
+      setShowError(true);
+      setTimeout(() => setShowError(false), 3000);
+    } finally {
+      setIsProcessing(false);
     }
   };
 
   const handleRecharge = async () => {
     setIsProcessing(true);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      const adminId = localStorage.getItem('admin_id');
+      if (!adminId) {
+        throw new Error('Admin ID not found in local storage');
+      }
+      if (!rechargeAmount) {
+        throw new Error('Recharge amount is required');
+      }
+      await transactionService.rechargeUser({
+        receiverId: selectedUser?._id!,
+        senderId: adminId!,
+        amount: Number(rechargeAmount),
+        type: 'topup',
+        description: `Recharge de ${rechargeAmount} FCFA a ${selectedUser?.firstName} ${selectedUser?.lastName}`,
+        isPartner: false,
+      });
+
+      await fetchUsers();
+
       setIsProcessing(false);
       setShowSuccess(true);
+
       setTimeout(() => {
         setShowSuccess(false);
         setShowRechargeModal(false);
@@ -279,20 +324,17 @@ export function Users() {
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {currentUsers.map((user) => (
-                <tr key={user.id} className="hover:bg-gray-50">
+                <tr key={user._id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
                       <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center">
                         <span className="text-gray-600 font-medium">
-                          {user.name
-                            .split(' ')
-                            .map((n) => n[0])
-                            .join('')}
+                          {user.firstName?.charAt(0)?.toUpperCase()}
                         </span>
                       </div>
                       <div className="ml-4">
                         <div className="text-sm font-medium text-gray-900">
-                          {user.name}
+                          {user.firstName} {user.lastName}
                         </div>
                       </div>
                     </div>
@@ -302,28 +344,30 @@ export function Users() {
                     <div className="text-sm text-gray-500">{user.email}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {user.location}
+                    {user.country}
+                    {','} {user.city}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm font-medium text-gray-900">
-                      {user.balance.toLocaleString()} FCFA
+                      {user.balance?.toLocaleString()} FCFA
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span
                       className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        user.status === 'active'
+                        user.active === true
                           ? 'bg-green-100 text-green-800'
                           : 'bg-red-100 text-red-800'
                       }`}
                     >
-                      {user.status === 'active'
+                      {user.active === true
                         ? t('users.active')
                         : t('users.inactive')}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {user.lastConnection}
+                    {/* TODO lastSeen */}
+                    {/* /{user.lastConnection} */}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex justify-center space-x-2">
@@ -491,7 +535,7 @@ export function Users() {
           <div className="bg-white rounded-lg max-w-2xl w-full max-h-[80vh] overflow-hidden">
             <div className="p-6 border-b border-gray-200 flex justify-between items-center">
               <h3 className="text-lg font-medium">
-                Historique des transactions - {selectedUser.name}
+                Historique des transactions - {selectedUser.firstName}
               </h3>
               <button
                 onClick={() => setShowHistoryModal(false)}
@@ -565,8 +609,8 @@ export function Users() {
                 Bloquer l'utilisateur
               </h3>
               <p className="text-sm text-gray-500 text-center mb-6">
-                Êtes-vous sûr de vouloir bloquer {selectedUser.name} ? Cette
-                action empêchera l'utilisateur d'accéder aux services.
+                Êtes-vous sûr de vouloir bloquer {selectedUser.firstName} ?
+                Cette action empêchera l'utilisateur d'accéder aux services.
               </p>
               <div className="flex space-x-3">
                 <button
@@ -579,7 +623,7 @@ export function Users() {
                   onClick={handleBlock}
                   className="flex-1 px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors"
                 >
-                  Bloquer
+                  {selectedUser.active ? 'Bloquer' : 'Activer'}
                 </button>
               </div>
             </div>
@@ -602,7 +646,7 @@ export function Users() {
               </h3>
               <p className="text-sm text-gray-500 text-center mb-6">
                 Êtes-vous sûr de vouloir supprimer définitivement{' '}
-                {selectedUser.name} ? Cette action est irréversible.
+                {selectedUser.firstName} ? Cette action est irréversible.
               </p>
               <div className="flex space-x-3">
                 <button

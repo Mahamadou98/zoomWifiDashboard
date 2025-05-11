@@ -9,8 +9,9 @@ export type Client = {
   gender: string;
   password: string;
   passwordConfirm: string;
-  active?: string;
+  active?: boolean;
   role?: string;
+  balance?: number;
 };
 
 export type ClientResponse = {
@@ -21,8 +22,17 @@ export type ClientResponse = {
   };
 };
 
-export default class AdminAuthService {
-  private static baseUrl = import.meta.env.VITE_BASEURL;
+export type ClientResponseArr = {
+  status: string;
+  token: string;
+  data: {
+    clients: Client[];
+  };
+};
+
+export default class UserAuthService {
+  // private static baseUrl = import.meta.env.VITE_BASEURL;
+  private static devBaseUrl = import.meta.env.VITE_DEV_BASEURL;
 
   // Helper function to handle requests
   private static async request(
@@ -39,7 +49,7 @@ export default class AdminAuthService {
         if (token) headers['Authorization'] = `Bearer ${token}`;
       }
 
-      const response = await fetch(`${this.baseUrl}/${endpoint}`, {
+      const response = await fetch(`${this.devBaseUrl}/${endpoint}`, {
         method,
         headers,
         body: body ? JSON.stringify(body) : undefined,
@@ -57,10 +67,10 @@ export default class AdminAuthService {
     }
   }
 
-  static async getAllPartners(): Promise<ClientResponse> {
+  static async getAllClients(): Promise<ClientResponseArr> {
     try {
       const response = await this.request(
-        'partner',
+        'users',
         'GET',
         undefined,
         true // This ensures the auth token is included
@@ -71,7 +81,7 @@ export default class AdminAuthService {
     }
   }
 
-  static async updatePartnerStatus(
+  static async updateClientStatus(
     partnerId: string,
     active: boolean
   ): Promise<Client> {
@@ -97,5 +107,46 @@ export default class AdminAuthService {
     );
 
     return response;
+  }
+
+  // activate admin
+  static async activateUser(
+    id: string,
+    active: boolean
+  ): Promise<ClientResponse> {
+    console.log('my args:', id, active);
+    const response = await this.request(
+      `users/updateClientStatus/${id}`,
+      'PATCH',
+      { active },
+      true
+    );
+    return response;
+  }
+
+  // delete admin
+  // static async deleteUser(id: string): Promise<ClientResponse> {
+  //   const response = await this.request(
+  //     `users/deleteMe/${id}`,
+  //     'DELETE',
+  //     undefined,
+  //     true
+  //   );
+  //   return response;
+  // }
+
+  static async deleteUser(id: string) {
+    const res = await fetch(
+      `${UserAuthService.devBaseUrl}/users/deleteMe/${id}`,
+      {
+        method: 'DELETE',
+      }
+    );
+
+    if (!res.ok) throw new Error(`Failed to delete user ${id}`);
+
+    // Only try to parse JSON if there is content
+    const text = await res.text();
+    return text ? JSON.parse(text) : null;
   }
 }

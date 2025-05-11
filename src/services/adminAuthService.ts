@@ -72,7 +72,7 @@ export default class AdminAuthService {
 
     if (admin.token) {
       localStorage.setItem('auth_token', admin.token);
-      localStorage.setItem('admin_id', admin.data.user._id);
+      // localStorage.setItem('admin_id', admin.data.user._id);
     }
 
     return admin;

@@ -61,12 +61,14 @@ const translations = {
     'partners.registered_on': 'Inscrit le',
     'partners.available_balance': 'Solde disponible',
     'partners.pending_withdrawal': 'Retrait en attente',
-    'partners.validate_registration': 'Valider l\'inscription',
+    'partners.validate_registration': "Valider l'inscription",
     'partners.topup': 'Recharger',
     'partners.withdrawal_qr': 'QR Retrait',
-    'partners.validate_partner_title': 'Valider l\'inscription du partenaire',
-    'partners.validate_partner_message': 'Vous êtes sur le point de valider l\'inscription de',
-    'partners.validate_partner_confirmation': 'En validant cette inscription, le partenaire pourra commencer à utiliser les services ZOOM WIFI.',
+    'partners.validate_partner_title': "Valider l'inscription du partenaire",
+    'partners.validate_partner_message':
+      "Vous êtes sur le point de valider l'inscription de",
+    'partners.validate_partner_confirmation':
+      'En validant cette inscription, le partenaire pourra commencer à utiliser les services ZOOM WIFI.',
 
     // Transactions
     'transactions.title': 'Transactions',
@@ -87,13 +89,14 @@ const translations = {
     'transactions.partner_withdrawal': 'Retrait Partenaire',
     'transactions.client_via_partner': 'Recharge via Partenaire',
     'transactions.confirm_withdrawal': 'Confirmer le retrait',
-    'transactions.confirm_withdrawal_message': 'Vous êtes sur le point de valider le retrait suivant :',
+    'transactions.confirm_withdrawal_message':
+      'Vous êtes sur le point de valider le retrait suivant :',
     'transactions.withdrawal_details': {
-      'partner': 'Partenaire',
-      'amount': 'Montant',
-      'code': 'Code',
-      'method': 'Méthode',
-      'bank_account': 'Compte bancaire'
+      partner: 'Partenaire',
+      amount: 'Montant',
+      code: 'Code',
+      method: 'Méthode',
+      bank_account: 'Compte bancaire',
     },
     'transactions.validate': 'Valider',
     'transactions.cancel': 'Annuler',
@@ -114,21 +117,21 @@ const translations = {
     'sessions.completed': 'Terminée',
     'sessions.duration': 'Durée',
     'sessions.connection_type': {
-      'fiber': 'Fibre',
-      'data': 'Data'
+      fiber: 'Fibre',
+      data: 'Data',
     },
     'sessions.session_details': 'Détails de la Session',
     'sessions.start_time': 'Début de Session',
     'sessions.end_time': 'Fin de Session',
     'sessions.session_in_progress': 'Session en cours',
-    'sessions.device_type': 'Type d\'appareil',
+    'sessions.device_type': "Type d'appareil",
     'sessions.connection_speed': 'Vitesse de connexion',
     'sessions.close': 'Fermer',
 
     // Settings
     'settings.title': 'Paramètres',
-    'settings.company_info': 'Informations de l\'Entreprise',
-    'settings.company_name': 'Nom de l\'entreprise',
+    'settings.company_info': "Informations de l'Entreprise",
+    'settings.company_name': "Nom de l'entreprise",
     'settings.email': 'Adresse email',
     'settings.phone': 'Téléphone',
     'settings.address': 'Adresse',
@@ -175,7 +178,7 @@ const translations = {
     'common.showing': 'Affichage de',
     'common.to': 'à',
     'common.of': 'sur',
-    'common.results': 'résultats'
+    'common.results': 'résultats',
   },
   en: {
     // Auth
@@ -233,8 +236,10 @@ const translations = {
     'partners.topup': 'Top up',
     'partners.withdrawal_qr': 'Withdrawal QR',
     'partners.validate_partner_title': 'Validate Partner Registration',
-    'partners.validate_partner_message': 'You are about to validate the registration of',
-    'partners.validate_partner_confirmation': 'By validating this registration, the partner will be able to start using ZOOM WIFI services.',
+    'partners.validate_partner_message':
+      'You are about to validate the registration of',
+    'partners.validate_partner_confirmation':
+      'By validating this registration, the partner will be able to start using ZOOM WIFI services.',
 
     // Transactions
     'transactions.title': 'Transactions',
@@ -255,13 +260,14 @@ const translations = {
     'transactions.partner_withdrawal': 'Partner Withdrawal',
     'transactions.client_via_partner': 'Top-up via Partner',
     'transactions.confirm_withdrawal': 'Confirm Withdrawal',
-    'transactions.confirm_withdrawal_message': 'You are about to validate the following withdrawal:',
+    'transactions.confirm_withdrawal_message':
+      'You are about to validate the following withdrawal:',
     'transactions.withdrawal_details': {
-      'partner': 'Partner',
-      'amount': 'Amount',
-      'code': 'Code',
-      'method': 'Method',
-      'bank_account': 'Bank Account'
+      partner: 'Partner',
+      amount: 'Amount',
+      code: 'Code',
+      method: 'Method',
+      bank_account: 'Bank Account',
     },
     'transactions.validate': 'Validate',
     'transactions.cancel': 'Cancel',
@@ -282,8 +288,8 @@ const translations = {
     'sessions.completed': 'Completed',
     'sessions.duration': 'Duration',
     'sessions.connection_type': {
-      'fiber': 'Fiber',
-      'data': 'Data'
+      fiber: 'Fiber',
+      data: 'Data',
     },
     'sessions.session_details': 'Session Details',
     'sessions.start_time': 'Start Time',
@@ -343,11 +349,13 @@ const translations = {
     'common.showing': 'Showing',
     'common.to': 'to',
     'common.of': 'of',
-    'common.results': 'results'
-  }
+    'common.results': 'results',
+  },
 };
 
-const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
+const LanguageContext = createContext<LanguageContextType | undefined>(
+  undefined
+);
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const [language, setLanguage] = useState<Language>('fr');

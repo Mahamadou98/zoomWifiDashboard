@@ -1,83 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, MapPin, Phone, Mail, CheckCircle, Wallet, AlertCircle, Globe2, User, X, Ban, Loader } from 'lucide-react';
+import {
+  Search,
+  Filter,
+  MapPin,
+  Phone,
+  Mail,
+  CheckCircle,
+  Wallet,
+  AlertCircle,
+  Globe2,
+  User,
+  X,
+  Ban,
+  Loader,
+} from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
-
-const ivorianCities = [
-  'Abidjan',
-  'Bouaké',
-  'Daloa',
-  'Yamoussoukro',
-  'Korhogo',
-  'San-Pédro',
-  'Man',
-  'Divo',
-  'Gagnoa',
-  'Abengourou',
-  'Grand-Bassam',
-  'Dabou',
-  'Bondoukou',
-  'Séguéla',
-  'Odienné',
-  'Sassandra',
-  'Dimbokro',
-  'Ferkessédougou',
-  'Soubré',
-  'Agboville'
-];
-
-const mockPartners = [
-  {
-    id: 1,
-    businessName: 'Cyber Café Express',
-    managerFirstName: 'Jean',
-    managerLastName: 'Kouassi',
-    email: 'contact@cybercafe-express.com',
-    phone: '+225 07 89 12 34',
-    address: 'Rue du Commerce, Plateau',
-    city: 'Abidjan',
-    country: 'Côte d\'Ivoire',
-    type: 'Cyber Café',
-    connectionTypes: ['fiber', 'data'],
-    status: 'active',
-    balance: 450000,
-    pendingWithdrawal: 75000,
-    registrationDate: '2024-03-10'
-  },
-  {
-    id: 2,
-    businessName: 'Restaurant Le Délice',
-    managerFirstName: 'Sophie',
-    managerLastName: 'Bamba',
-    email: 'info@ledelice.com',
-    phone: '+225 05 67 89 12',
-    address: 'Avenue de la République',
-    city: 'Bouaké',
-    country: 'Côte d\'Ivoire',
-    type: 'Restaurant',
-    connectionTypes: ['fiber'],
-    status: 'pending',
-    balance: 280000,
-    pendingWithdrawal: 0,
-    registrationDate: '2024-03-15'
-  },
-  {
-    id: 3,
-    businessName: 'Hôtel Magnificence',
-    managerFirstName: 'Paul',
-    managerLastName: 'Koffi',
-    email: 'contact@hotel-magnificence.com',
-    phone: '+225 01 23 45 67',
-    address: 'Boulevard de la Marina, Zone 4',
-    city: 'Abidjan',
-    country: 'Côte d\'Ivoire',
-    type: 'Hôtel',
-    connectionTypes: ['fiber', 'data'],
-    status: 'active',
-    balance: 750000,
-    pendingWithdrawal: 150000,
-    registrationDate: '2024-03-01'
-  }
-];
+import PartnerService, { Partner } from '../services/partnerService';
+import transactionService from '../services/transactionService';
 
 export function Partners() {
   const { t } = useLanguage();
@@ -85,87 +24,111 @@ export function Partners() {
   const [showDeactivateModal, setShowDeactivateModal] = useState(false);
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [showTopupModal, setShowTopupModal] = useState(false);
-  const [selectedPartner, setSelectedPartner] = useState(null);
+  const [selectedPartner, setSelectedPartner] = useState<Partner | null>(null);
   const [topupAmount, setTopupAmount] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [showError, setShowError] = useState(false);
-  
+
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState({
     city: 'all',
     balanceRange: 'all',
-    pendingWithdrawal: false
+    pendingWithdrawal: false,
   });
-  const [filteredPartners, setFilteredPartners] = useState(mockPartners);
+  const [filteredPartners, setFilteredPartners] = useState<Partner[]>([]);
+  const [allPartners, setAllPartners] = useState<Partner[]>([]);
 
   useEffect(() => {
-    let result = mockPartners;
+    let result = allPartners;
 
     if (searchTerm) {
       const searchLower = searchTerm.toLowerCase();
-      result = result.filter(partner => 
-        partner.businessName.toLowerCase().includes(searchLower) ||
-        `${partner.managerFirstName} ${partner.managerLastName}`.toLowerCase().includes(searchLower)
+      result = result.filter(
+        (partner) =>
+          partner.establishmentName.toLowerCase().includes(searchLower) ||
+          `${partner.managerFirstName} ${partner.managerLastName}`
+            .toLowerCase()
+            .includes(searchLower)
       );
     }
 
     if (filters.city !== 'all') {
-      result = result.filter(partner => partner.city === filters.city);
+      result = result.filter((partner) => partner.city === filters.city);
     }
 
     if (filters.balanceRange !== 'all') {
       switch (filters.balanceRange) {
         case 'low':
-          result = result.filter(partner => partner.balance < 100000);
+          result = result.filter((partner) => partner.balance! < 100000);
           break;
         case 'medium':
-          result = result.filter(partner => partner.balance >= 100000 && partner.balance < 500000);
+          result = result.filter(
+            (partner) => partner.balance! >= 100000 && partner.balance! < 500000
+          );
           break;
         case 'high':
-          result = result.filter(partner => partner.balance >= 500000);
+          result = result.filter((partner) => partner.balance! >= 500000);
           break;
       }
     }
 
     if (filters.pendingWithdrawal) {
-      result = result.filter(partner => partner.pendingWithdrawal > 0);
+      result = result.filter((partner) => partner.pendingWithdrawal! > 0);
     }
 
     setFilteredPartners(result);
   }, [searchTerm, filters]);
 
-  const handleValidatePartner = (partner) => {
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        setIsProcessing(true);
+        const response = await PartnerService.getAllPartners();
+        setAllPartners(response.data.partnes);
+        setFilteredPartners(response.data.partnes);
+      } catch (err: any) {
+        // setErrorMessage(err.message || 'Failed to fetch partners');
+      } finally {
+        setIsProcessing(false);
+      }
+    };
+
+    fetchUsers();
+  }, []);
+
+  const handleValidatePartner = (partner: Partner) => {
     setSelectedPartner(partner);
     setShowValidationModal(true);
   };
 
-  const handleDeactivatePartner = (partner) => {
+  const handleDeactivatePartner = (partner: Partner) => {
     setSelectedPartner(partner);
     setShowDeactivateModal(true);
   };
 
   const handleApprovePartner = async () => {
     try {
+      const newStatus = !selectedPartner?.active;
       setIsProcessing(true);
-      
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // Update the partner's status in the local state
-      const updatedPartners = filteredPartners.map(partner => {
-        if (partner.id === selectedPartner.id) {
-          return {
-            ...partner,
-            status: 'active'
-          };
-        }
-        return partner;
-      });
-      
+
+      // // Simulate API call
+      // await new Promise((resolve) => setTimeout(resolve, 1500));
+      await PartnerService.updatePartnerStatus(selectedPartner!._id, newStatus);
+
+      const updatedPartners = allPartners.map((partner) =>
+        partner._id === selectedPartner?._id
+          ? { ...partner, active: newStatus }
+          : partner
+      );
+
+      setAllPartners(updatedPartners);
+      setFilteredPartners(updatedPartners); // Reapply filters if needed
+      setShowSuccess(true);
+
       setFilteredPartners(updatedPartners);
       setShowSuccess(true);
-      
+
       setTimeout(() => {
         setShowSuccess(false);
         setShowValidationModal(false);
@@ -182,14 +145,27 @@ export function Partners() {
 
   const handleDeactivate = async () => {
     try {
+      const newStatus = !selectedPartner?.active;
       setShowDeactivateModal(false);
+
+      await PartnerService.updatePartnerStatus(selectedPartner!._id, newStatus);
+      const updatedPartners = allPartners.map((partner) =>
+        partner._id === selectedPartner?._id
+          ? { ...partner, active: newStatus }
+          : partner
+      );
+
+      setAllPartners(updatedPartners);
+      setFilteredPartners(updatedPartners); // Reapply filters if needed
+      setShowSuccess(true);
+
       setSelectedPartner(null);
     } catch (error) {
       console.error('Error deactivating partner:', error);
     }
   };
 
-  const handleShowTopup = (partner) => {
+  const handleShowTopup = (partner: Partner) => {
     setSelectedPartner(partner);
     setTopupAmount('');
     setShowTopupModal(true);
@@ -197,10 +173,27 @@ export function Partners() {
 
   const handleTopup = async () => {
     if (!topupAmount || parseInt(topupAmount) <= 0) return;
-    
     setIsProcessing(true);
     try {
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      // await new Promise((resolve) => setTimeout(resolve, 1500));
+      const adminId = localStorage.getItem('admin_id');
+      if (!adminId) {
+        throw new Error('Admin ID not found in local storage');
+      }
+      if (!topupAmount) {
+        throw new Error('Recharge amount is required');
+      }
+      await transactionService.rechargeUser({
+        receiverId: selectedPartner?._id!,
+        senderId: adminId!,
+        amount: Number(topupAmount),
+        type: 'topup',
+        description: `Recharge de ${topupAmount} FCFA a ${selectedPartner?.establishmentName}`,
+        isPartner: true,
+      });
+
+      // await fetchUsers();
+
       setIsProcessing(false);
       setShowSuccess(true);
       setTimeout(() => {
@@ -222,12 +215,28 @@ export function Partners() {
     setFilters({
       city: 'all',
       balanceRange: 'all',
-      pendingWithdrawal: false
+      pendingWithdrawal: false,
     });
   };
 
-  const renderPartnerActions = (partner) => {
-    if (partner.status === 'pending') {
+  const formatDate = (date: string | Date): string => {
+    const d = new Date(date);
+    if (isNaN(d.getTime())) {
+      return 'N/A';
+    }
+
+    return d.toLocaleString('fr-FR', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      // hour12: true,
+    });
+  };
+
+  const renderPartnerActions = (partner: Partner) => {
+    if (partner.active === false) {
       return (
         <button
           onClick={() => handleValidatePartner(partner)}
@@ -241,7 +250,7 @@ export function Partners() {
 
     return (
       <>
-        <button 
+        <button
           onClick={() => handleShowTopup(partner)}
           className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
         >
@@ -253,7 +262,7 @@ export function Partners() {
           className="flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
         >
           <Ban className="w-4 h-4" />
-          Désactiver le compte
+          Bloquer
         </button>
       </>
     );
@@ -262,7 +271,9 @@ export function Partners() {
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">{t('partners.title')}</h1>
+        <h1 className="text-2xl font-bold text-gray-900">
+          {t('partners.title')}
+        </h1>
         <div className="flex gap-2">
           <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
             {t('partners.export_data')}
@@ -293,7 +304,9 @@ export function Partners() {
           </button>
         </div>
 
-        {(filters.city !== 'all' || filters.balanceRange !== 'all' || filters.pendingWithdrawal) && (
+        {(filters.city !== 'all' ||
+          filters.balanceRange !== 'all' ||
+          filters.pendingWithdrawal) && (
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <span className="text-sm text-gray-500">Filtres actifs:</span>
             {filters.city !== 'all' && (
@@ -303,9 +316,11 @@ export function Partners() {
             )}
             {filters.balanceRange !== 'all' && (
               <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
-                {filters.balanceRange === 'low' ? 'Solde < 100k' :
-                 filters.balanceRange === 'medium' ? 'Solde 100k-500k' :
-                 'Solde > 500k'}
+                {filters.balanceRange === 'low'
+                  ? 'Solde < 100k'
+                  : filters.balanceRange === 'medium'
+                  ? 'Solde 100k-500k'
+                  : 'Solde > 500k'}
               </span>
             )}
             {filters.pendingWithdrawal && (
@@ -325,16 +340,22 @@ export function Partners() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredPartners.map((partner) => (
-          <div key={partner.id} className="bg-white rounded-lg shadow-md overflow-hidden">
+          <div
+            key={partner._id}
+            className="bg-white rounded-lg shadow-md overflow-hidden"
+          >
             <div className="p-6">
               <div className="flex justify-between items-start mb-4">
                 <div>
-                  <h2 className="text-xl font-semibold text-gray-900">{partner.businessName}</h2>
+                  <h2 className="text-xl font-semibold text-gray-900">
+                    {partner.establishmentName}
+                  </h2>
                   <p className="text-sm text-gray-500">
-                    {t('partners.registered_on')} {partner.registrationDate}
+                    {t('partners.registered_on')}{' '}
+                    {formatDate(partner.createdAt)}
                   </p>
                 </div>
-                {partner.status === 'active' ? (
+                {partner.active === true ? (
                   <div className="flex items-center text-green-600">
                     <CheckCircle className="w-6 h-6" />
                   </div>
@@ -344,15 +365,15 @@ export function Partners() {
                   </div>
                 )}
               </div>
-              
+
               <div className="space-y-3">
-                <p className="text-gray-600">{partner.type}</p>
+                <p className="text-gray-600">{partner.establishmentType}</p>
 
                 <div className="flex items-center text-gray-600">
                   <User className="w-4 h-4 mr-2" />
                   {partner.managerFirstName} {partner.managerLastName}
                 </div>
-                
+
                 <div className="flex items-center text-gray-600">
                   <MapPin className="w-4 h-4 mr-2" />
                   {partner.address}
@@ -365,16 +386,20 @@ export function Partners() {
 
                 <div className="pt-3 border-t">
                   <div className="flex justify-between items-center mb-2">
-                    <p className="text-sm text-gray-600">{t('partners.available_balance')}</p>
+                    <p className="text-sm text-gray-600">
+                      {t('partners.available_balance')}
+                    </p>
                     <p className="text-xl font-semibold text-gray-900">
-                      {partner.balance.toLocaleString()} FCFA
+                      {partner?.balance?.toLocaleString()} FCFA
                     </p>
                   </div>
-                  {partner.pendingWithdrawal > 0 && (
+                  {partner.pendingWithdrawal! > 0 && (
                     <div className="flex justify-between items-center text-sm">
-                      <p className="text-yellow-600">{t('partners.pending_withdrawal')}</p>
+                      <p className="text-yellow-600">
+                        {t('partners.pending_withdrawal')}
+                      </p>
                       <p className="font-medium text-yellow-600">
-                        {partner.pendingWithdrawal.toLocaleString()} FCFA
+                        {partner.pendingWithdrawal!.toLocaleString()} FCFA
                       </p>
                     </div>
                   )}
@@ -404,7 +429,9 @@ export function Partners() {
                   <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center mb-4">
                     <CheckCircle className="w-6 h-6 text-green-600" />
                   </div>
-                  <p className="text-green-600 font-medium">Partenaire validé avec succès</p>
+                  <p className="text-green-600 font-medium">
+                    Partenaire validé avec succès
+                  </p>
                 </div>
               ) : (
                 <>
@@ -420,7 +447,9 @@ export function Partners() {
                     <p className="text-sm text-gray-500 text-center">
                       {t('partners.validate_partner_message')}:
                     </p>
-                    <p className="mt-2 font-medium text-gray-900 text-center">{selectedPartner.businessName}</p>
+                    <p className="mt-2 font-medium text-gray-900 text-center">
+                      {selectedPartner.establishmentName}
+                    </p>
                     <div className="mt-4">
                       <p className="text-sm text-gray-600 text-center">
                         {t('partners.validate_partner_confirmation')}
@@ -463,10 +492,12 @@ export function Partners() {
               </h3>
               <div className="mb-4">
                 <p className="text-sm text-gray-500 text-center">
-                  Êtes-vous sûr de vouloir désactiver le compte de {selectedPartner.businessName} ?
+                  Êtes-vous sûr de vouloir désactiver le compte de{' '}
+                  {selectedPartner.establishmentName} ?
                 </p>
                 <p className="mt-4 text-sm text-gray-600 text-center">
-                  Cette action empêchera le partenaire d'accéder aux services ZOOM WIFI jusqu'à réactivation.
+                  Cette action empêchera le partenaire d'accéder aux services
+                  ZOOM WIFI jusqu'à réactivation.
                 </p>
               </div>
               <div className="flex justify-end gap-3">
@@ -480,7 +511,7 @@ export function Partners() {
                   onClick={handleDeactivate}
                   className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md"
                 >
-                  Désactiver
+                  Bloquer
                 </button>
               </div>
             </div>
@@ -494,7 +525,9 @@ export function Partners() {
           <div className="bg-white rounded-lg max-w-md w-full">
             <div className="p-6">
               <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg font-medium">Recharger le compte partenaire</h3>
+                <h3 className="text-lg font-medium">
+                  Recharger le compte partenaire
+                </h3>
                 <button
                   onClick={() => setShowTopupModal(false)}
                   className="text-gray-400 hover:text-gray-500"
@@ -502,7 +535,7 @@ export function Partners() {
                   <X className="w-5 h-5" />
                 </button>
               </div>
-              
+
               {isProcessing ? (
                 <div className="flex flex-col items-center justify-center py-8">
                   <Loader className="w-8 h-8 text-blue-600 animate-spin" />
@@ -513,14 +546,18 @@ export function Partners() {
                   <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center mb-4">
                     <CheckCircle className="w-6 h-6 text-green-600" />
                   </div>
-                  <p className="text-green-600 font-medium">Compte crédité avec succès</p>
+                  <p className="text-green-600 font-medium">
+                    Compte crédité avec succès
+                  </p>
                 </div>
               ) : showError ? (
                 <div className="flex flex-col items-center justify-center py-8">
                   <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mb-4">
                     <AlertCircle className="w-6 h-6 text-red-600" />
                   </div>
-                  <p className="text-red-600 font-medium">Échec de la recharge</p>
+                  <p className="text-red-600 font-medium">
+                    Échec de la recharge
+                  </p>
                 </div>
               ) : (
                 <>
@@ -529,14 +566,17 @@ export function Partners() {
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Point de vente
                       </label>
-                      <p className="text-gray-900">{selectedPartner.businessName}</p>
+                      <p className="text-gray-900">
+                        {selectedPartner.establishmentName}
+                      </p>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Responsable
                       </label>
                       <p className="text-gray-900">
-                        {selectedPartner.managerFirstName} {selectedPartner.managerLastName}
+                        {selectedPartner.managerFirstName}{' '}
+                        {selectedPartner.managerLastName}
                       </p>
                     </div>
                     <div>
