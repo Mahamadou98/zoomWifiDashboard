@@ -284,7 +284,8 @@ export function Dashboard() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600">
-                {t('dashboard.zoom_commission')}
+                {/* {t('dashboard.zoom_commission')} */}
+                Montant total rechargé
               </p>
               <p className="text-2xl font-bold text-gray-900">
                 {/* {stats.zoomWifiCommission.toLocaleString()} FCFA */}
