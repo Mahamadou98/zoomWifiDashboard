@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "test": "vitest",
     "test:coverage": "vitest run --coverage",
-    "docs": "typedoc --out docs src"
+    "docs": "typedoc --out docs src",
+    "start": "vite preview --host --port $PORT"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.7",
