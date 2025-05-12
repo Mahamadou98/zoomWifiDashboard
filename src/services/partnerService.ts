@@ -20,14 +20,15 @@ export type Partner = {
 
 export type PartnerResponse = {
   status: string;
-  results: number;
+  totals: number;
   data: {
     partnes: Partner[];
   };
 };
 
 export default class PartnerService {
-  private static baseUrl = import.meta.env.VITE_BASEURL;
+  // private static baseUrl = import.meta.env.VITE_BASEURL;
+  private static devBaseUrl = import.meta.env.VITE_DEV_BASEURL;
 
   // Helper function to handle requests
   private static async request(
@@ -44,7 +45,7 @@ export default class PartnerService {
         if (token) headers['Authorization'] = `Bearer ${token}`;
       }
 
-      const response = await fetch(`${this.baseUrl}/${endpoint}`, {
+      const response = await fetch(`${this.devBaseUrl}/${endpoint}`, {
         method,
         headers,
         body: body ? JSON.stringify(body) : undefined,
@@ -62,13 +63,15 @@ export default class PartnerService {
     }
   }
 
-  static async getAllPartners(): Promise<PartnerResponse> {
+  static async getAllPartners(
+    queryParams: URLSearchParams
+  ): Promise<PartnerResponse> {
     try {
       const response = await this.request(
-        'partner',
+        `partner?${queryParams.toString()}`,
         'GET',
         undefined,
-        true // This ensures the auth token is included
+        true
       );
       return response;
     } catch (error) {

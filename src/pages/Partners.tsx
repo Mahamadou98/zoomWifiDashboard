@@ -13,10 +13,16 @@ import {
   X,
   Ban,
   Loader,
+  Download,
+  FileSpreadsheet,
+  FileText,
 } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import PartnerService, { Partner } from '../services/partnerService';
 import transactionService from '../services/transactionService';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import * as XLSX from 'xlsx';
 
 export function Partners() {
   const { t } = useLanguage();
@@ -29,73 +35,83 @@ export function Partners() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [showError, setShowError] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState({
     city: 'all',
     balanceRange: 'all',
     pendingWithdrawal: false,
+    status: 'all',
   });
   const [filteredPartners, setFilteredPartners] = useState<Partner[]>([]);
   const [allPartners, setAllPartners] = useState<Partner[]>([]);
 
-  useEffect(() => {
-    let result = allPartners;
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize] = useState(10);
+  const [totalPartners, setTotalPartners] = useState(0);
 
-    if (searchTerm) {
-      const searchLower = searchTerm.toLowerCase();
-      result = result.filter(
-        (partner) =>
-          partner.establishmentName.toLowerCase().includes(searchLower) ||
-          `${partner.managerFirstName} ${partner.managerLastName}`
-            .toLowerCase()
-            .includes(searchLower)
-      );
-    }
+  const fetchPartners = async (page: number, filters: any) => {
+    try {
+      setIsProcessing(true);
+      const queryParams = new URLSearchParams({
+        page: page.toString(),
+        limit: pageSize.toString(),
+        ...(filters.status !== 'all' && {
+          active: (filters.status === 'active').toString(),
+        }),
+        ...(filters.city !== 'all' && { city: filters.city }),
+        // Update the balance filter formatting
+        ...(filters.balanceRange !== 'all' && {
+          minBalance:
+            filters.balanceRange === 'low'
+              ? '0'
+              : filters.balanceRange === 'medium'
+              ? '100000'
+              : '500000',
+          maxBalance:
+            filters.balanceRange === 'low'
+              ? '100000'
+              : filters.balanceRange === 'medium'
+              ? '500000'
+              : '',
+        }),
+        ...(filters.pendingWithdrawal && { pendingWithdrawal: 'true' }),
+        ...(searchTerm && {
+          search: searchTerm,
+          searchFields:
+            'establishmentName,managerFirstName,managerLastName,phone,email',
+        }),
+      });
 
-    if (filters.city !== 'all') {
-      result = result.filter((partner) => partner.city === filters.city);
-    }
-
-    if (filters.balanceRange !== 'all') {
-      switch (filters.balanceRange) {
-        case 'low':
-          result = result.filter((partner) => partner.balance! < 100000);
-          break;
-        case 'medium':
-          result = result.filter(
-            (partner) => partner.balance! >= 100000 && partner.balance! < 500000
-          );
-          break;
-        case 'high':
-          result = result.filter((partner) => partner.balance! >= 500000);
-          break;
-      }
-    }
-
-    if (filters.pendingWithdrawal) {
-      result = result.filter((partner) => partner.pendingWithdrawal! > 0);
-    }
-
-    setFilteredPartners(result);
-  }, [searchTerm, filters]);
-
-  useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        setIsProcessing(true);
-        const response = await PartnerService.getAllPartners();
+      const response = await PartnerService.getAllPartners(queryParams);
+      if (response.data && response.data.partnes) {
         setAllPartners(response.data.partnes);
         setFilteredPartners(response.data.partnes);
-      } catch (err: any) {
-        // setErrorMessage(err.message || 'Failed to fetch partners');
-      } finally {
-        setIsProcessing(false);
-      }
-    };
 
-    fetchUsers();
-  }, []);
+        setTotalPartners(response.totals || 0); // Adjust this according to your API response structure
+      } else {
+        setAllPartners([]);
+        setFilteredPartners([]);
+        setTotalPartners(0);
+      }
+    } catch (error) {
+      console.error('Error fetching partners:', error);
+      setAllPartners([]);
+      setFilteredPartners([]);
+      setTotalPartners(0);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchPartners(currentPage, filters);
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [currentPage, filters, searchTerm, pageSize]);
 
   const handleValidatePartner = (partner: Partner) => {
     setSelectedPartner(partner);
@@ -216,7 +232,9 @@ export function Partners() {
       city: 'all',
       balanceRange: 'all',
       pendingWithdrawal: false,
+      status: 'all',
     });
+    setCurrentPage(1); // Reset to first page when clearing filters
   };
 
   const formatDate = (date: string | Date): string => {
@@ -268,6 +286,101 @@ export function Partners() {
     );
   };
 
+  const handlePageChange = (page: number) => {
+    const maxPage = Math.ceil(totalPartners / pageSize);
+    if (page < 1 || page > maxPage) return;
+    setCurrentPage(page);
+  };
+
+  const handleExportPDF = () => {
+    try {
+      const doc = new jsPDF();
+
+      // Add title
+      doc.setFontSize(20);
+      doc.text('Liste des Partenaires', 14, 22);
+
+      // Add export date
+      doc.setFontSize(11);
+      doc.text(
+        `Exporté le ${new Date().toLocaleDateString(
+          'fr-FR'
+        )} à ${new Date().toLocaleTimeString('fr-FR')}`,
+        14,
+        32
+      );
+
+      // Prepare the data
+      const tableData = filteredPartners.map((partner) => [
+        partner.establishmentName,
+        `${partner.managerFirstName} ${partner.managerLastName}`,
+        partner.phone,
+        `${partner.city}, ${partner.country}`,
+        `${partner.balance?.toLocaleString()} FCFA`,
+        partner.active ? 'Actif' : 'Inactif',
+      ]);
+
+      // Add the table
+      autoTable(doc, {
+        head: [
+          [
+            'Point de vente',
+            'Responsable',
+            'Contact',
+            'Localisation',
+            'Solde',
+            'Statut',
+          ],
+        ],
+        body: tableData,
+        startY: 40,
+        headStyles: {
+          fillColor: [37, 99, 235],
+          textColor: [255, 255, 255],
+          fontSize: 10,
+          fontStyle: 'bold',
+        },
+        bodyStyles: { fontSize: 9 },
+        alternateRowStyles: { fillColor: [249, 250, 251] },
+      });
+
+      doc.save(`partenaires_${new Date().toISOString().split('T')[0]}.pdf`);
+      setShowExportModal(false);
+    } catch (error) {
+      console.error('Error exporting PDF:', error);
+    }
+  };
+
+  const handleExportExcel = () => {
+    try {
+      const data = filteredPartners.map((partner) => ({
+        'Point de vente': partner.establishmentName,
+        Responsable: `${partner.managerFirstName} ${partner.managerLastName}`,
+        Contact: partner.phone,
+        Email: partner.email,
+        Adresse: partner.address,
+        Ville: partner.city,
+        Pays: partner.country,
+        'Type établissement': partner.establishmentType,
+        Solde: partner.balance,
+        'Retrait en attente': partner.pendingWithdrawal || 0,
+        Statut: partner.active ? 'Actif' : 'Inactif',
+        'Date inscription': formatDate(partner.createdAt),
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Partenaires');
+      XLSX.writeFile(
+        wb,
+        `partenaires_${new Date().toISOString().split('T')[0]}.xlsx`
+      );
+      setShowExportModal(false);
+    } catch (error) {
+      console.error('Error exporting Excel:', error);
+    }
+  };
+
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
@@ -275,7 +388,11 @@ export function Partners() {
           {t('partners.title')}
         </h1>
         <div className="flex gap-2">
-          <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+          <button
+            onClick={() => setShowExportModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            <Download className="w-5 h-5" />
             {t('partners.export_data')}
           </button>
         </div>
@@ -289,7 +406,10 @@ export function Partners() {
               <input
                 type="text"
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setCurrentPage(1);
+                }}
                 placeholder={t('partners.search_placeholder')}
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
@@ -304,11 +424,17 @@ export function Partners() {
           </button>
         </div>
 
-        {(filters.city !== 'all' ||
+        {(filters.status !== 'all' ||
+          filters.city !== 'all' ||
           filters.balanceRange !== 'all' ||
           filters.pendingWithdrawal) && (
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <span className="text-sm text-gray-500">Filtres actifs:</span>
+            {filters.status !== 'all' && (
+              <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
+                {filters.status === 'active' ? 'Actif' : 'Inactif'}
+              </span>
+            )}
             {filters.city !== 'all' && (
               <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
                 {filters.city}
@@ -338,80 +464,155 @@ export function Partners() {
         )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredPartners.map((partner) => (
-          <div
-            key={partner._id}
-            className="bg-white rounded-lg shadow-md overflow-hidden"
-          >
-            <div className="p-6">
-              <div className="flex justify-between items-start mb-4">
-                <div>
-                  <h2 className="text-xl font-semibold text-gray-900">
-                    {partner.establishmentName}
-                  </h2>
-                  <p className="text-sm text-gray-500">
-                    {t('partners.registered_on')}{' '}
-                    {formatDate(partner.createdAt)}
-                  </p>
-                </div>
-                {partner.active === true ? (
-                  <div className="flex items-center text-green-600">
-                    <CheckCircle className="w-6 h-6" />
-                  </div>
-                ) : (
-                  <div className="flex items-center text-yellow-600">
-                    <AlertCircle className="w-6 h-6" />
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-3">
-                <p className="text-gray-600">{partner.establishmentType}</p>
-
-                <div className="flex items-center text-gray-600">
-                  <User className="w-4 h-4 mr-2" />
-                  {partner.managerFirstName} {partner.managerLastName}
-                </div>
-
-                <div className="flex items-center text-gray-600">
-                  <MapPin className="w-4 h-4 mr-2" />
-                  {partner.address}
-                </div>
-
-                <div className="flex items-center text-gray-600">
-                  <Globe2 className="w-4 h-4 mr-2" />
-                  {partner.city}, {partner.country}
-                </div>
-
-                <div className="pt-3 border-t">
-                  <div className="flex justify-between items-center mb-2">
-                    <p className="text-sm text-gray-600">
-                      {t('partners.available_balance')}
-                    </p>
-                    <p className="text-xl font-semibold text-gray-900">
-                      {partner?.balance?.toLocaleString()} FCFA
-                    </p>
-                  </div>
-                  {partner.pendingWithdrawal! > 0 && (
-                    <div className="flex justify-between items-center text-sm">
-                      <p className="text-yellow-600">
-                        {t('partners.pending_withdrawal')}
-                      </p>
-                      <p className="font-medium text-yellow-600">
-                        {partner.pendingWithdrawal!.toLocaleString()} FCFA
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="mt-6 grid grid-cols-2 gap-3">
-                {renderPartnerActions(partner)}
-              </div>
+      <div className="bg-white rounded-lg shadow-md overflow-hidden">
+        <div className="overflow-x-auto">
+          {isProcessing ? (
+            <div className="flex justify-center items-center py-8">
+              <Loader className="w-8 h-8 text-blue-600 animate-spin" />
             </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-6">
+              {filteredPartners.map((partner) => (
+                <div
+                  key={partner._id}
+                  className="bg-white rounded-lg shadow-md overflow-hidden"
+                >
+                  <div className="p-6">
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <h2 className="text-xl font-semibold text-gray-900">
+                          {partner.establishmentName}
+                        </h2>
+                        <p className="text-sm text-gray-500">
+                          {t('partners.registered_on')}{' '}
+                          {formatDate(partner.createdAt)}
+                        </p>
+                      </div>
+                      {partner.active === true ? (
+                        <div className="flex items-center text-green-600">
+                          <CheckCircle className="w-6 h-6" />
+                        </div>
+                      ) : (
+                        <div className="flex items-center text-yellow-600">
+                          <AlertCircle className="w-6 h-6" />
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="space-y-3">
+                      <p className="text-gray-600">
+                        {partner.establishmentType}
+                      </p>
+
+                      <div className="flex items-center text-gray-600">
+                        <User className="w-4 h-4 mr-2" />
+                        {partner.managerFirstName} {partner.managerLastName}
+                      </div>
+
+                      <div className="flex items-center text-gray-600">
+                        <MapPin className="w-4 h-4 mr-2" />
+                        {partner.address}
+                      </div>
+
+                      <div className="flex items-center text-gray-600">
+                        <Globe2 className="w-4 h-4 mr-2" />
+                        {partner.city}, {partner.country}
+                      </div>
+
+                      <div className="pt-3 border-t">
+                        <div className="flex justify-between items-center mb-2">
+                          <p className="text-sm text-gray-600">
+                            {t('partners.available_balance')}
+                          </p>
+                          <p className="text-xl font-semibold text-gray-900">
+                            {partner?.balance?.toLocaleString()} FCFA
+                          </p>
+                        </div>
+                        {partner.pendingWithdrawal! > 0 && (
+                          <div className="flex justify-between items-center text-sm">
+                            <p className="text-yellow-600">
+                              {t('partners.pending_withdrawal')}
+                            </p>
+                            <p className="font-medium text-yellow-600">
+                              {partner.pendingWithdrawal!.toLocaleString()} FCFA
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="mt-6 grid grid-cols-2 gap-3">
+                      {renderPartnerActions(partner)}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="bg-white px-4 py-3 border-t border-gray-200 mt-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm text-gray-700">
+              {t('common.showing')}{' '}
+              <span className="font-medium">
+                {totalPartners === 0 ? 0 : (currentPage - 1) * pageSize + 1}
+              </span>{' '}
+              {t('common.to')}{' '}
+              <span className="font-medium">
+                {Math.min(currentPage * pageSize, totalPartners)}
+              </span>{' '}
+              {t('common.of')}{' '}
+              <span className="font-medium">{totalPartners}</span>{' '}
+              {t('common.results')}
+            </p>
           </div>
-        ))}
+          {totalPartners > 0 && (
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="px-3 py-1 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
+              >
+                {t('common.previous')}
+              </button>
+              <div className="flex space-x-1">
+                {Array.from(
+                  { length: Math.ceil(totalPartners / pageSize) },
+                  (_, i) => i + 1
+                )
+                  .filter(
+                    (page) =>
+                      page === 1 ||
+                      page === Math.ceil(totalPartners / pageSize) ||
+                      (page >= currentPage - 1 && page <= currentPage + 1)
+                  )
+                  .map((page) => (
+                    <button
+                      key={page}
+                      onClick={() => handlePageChange(page)}
+                      className={`px-3 py-1 border rounded-md text-sm font-medium ${
+                        currentPage === page
+                          ? 'bg-blue-50 text-blue-600 border-blue-500'
+                          : 'text-gray-700 border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  ))}
+              </div>
+              <button
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage * pageSize >= totalPartners}
+                className="px-3 py-1 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
+              >
+                {t('common.next')}
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Validation Modal */}
@@ -618,6 +819,137 @@ export function Partners() {
                   </div>
                 </>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Filter Modal */}
+      {showFilterModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg max-w-md w-full">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-medium">Filtres</h3>
+                <button
+                  onClick={() => setShowFilterModal(false)}
+                  className="text-gray-400 hover:text-gray-500"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Statut
+                  </label>
+                  <select
+                    value={filters.status}
+                    onChange={(e) =>
+                      setFilters({ ...filters, status: e.target.value })
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="all">Tous les statuts</option>
+                    <option value="active">Actif</option>
+                    <option value="inactive">Inactif</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Solde
+                  </label>
+                  <select
+                    value={filters.balanceRange}
+                    onChange={(e) =>
+                      setFilters({ ...filters, balanceRange: e.target.value })
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="all">Tous les soldes</option>
+                    <option value="low">Moins de 100 000 FCFA</option>
+                    <option value="medium">
+                      Entre 100 000 et 500 000 FCFA
+                    </option>
+                    <option value="high">Plus de 500 000 FCFA</option>
+                  </select>
+                </div>
+
+                {/* <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="pendingWithdrawal"
+                    checked={filters.pendingWithdrawal}
+                    onChange={(e) =>
+                      setFilters({
+                        ...filters,
+                        pendingWithdrawal: e.target.checked,
+                      })
+                    }
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  />
+                  <label
+                    htmlFor="pendingWithdrawal"
+                    className="ml-2 block text-sm text-gray-900"
+                  >
+                    Retrait en attente
+                  </label>
+                </div> */}
+              </div>
+
+              <div className="mt-6 flex space-x-3">
+                <button
+                  onClick={resetFilters}
+                  className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  Réinitialiser
+                </button>
+                <button
+                  onClick={() => setShowFilterModal(false)}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Appliquer
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Export Modal */}
+      {showExportModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg max-w-sm w-full">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-medium">Export des données</h3>
+                <button
+                  onClick={() => setShowExportModal(false)}
+                  className="text-gray-400 hover:text-gray-500"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <button
+                  onClick={handleExportPDF}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                >
+                  <FileText className="w-5 h-5" />
+                  Exporter en PDF
+                </button>
+
+                <button
+                  onClick={handleExportExcel}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  <FileSpreadsheet className="w-5 h-5" />
+                  Exporter en Excel
+                </button>
+              </div>
             </div>
           </div>
         </div>

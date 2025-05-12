@@ -12,6 +12,7 @@ export type Client = {
   active?: boolean;
   role?: string;
   balance?: number;
+  createdAt?: string;
 };
 
 export type ClientResponse = {
@@ -25,6 +26,7 @@ export type ClientResponse = {
 export type ClientResponseArr = {
   status: string;
   token: string;
+  totals: number;
   data: {
     clients: Client[];
   };
@@ -67,10 +69,13 @@ export default class UserAuthService {
     }
   }
 
-  static async getAllClients(): Promise<ClientResponseArr> {
+  static async getAllClients(
+    queryParams: URLSearchParams
+  ): Promise<ClientResponseArr> {
+    //  return axios.get(`${API_URL}/users?${queryParams.toString()}`);
     try {
       const response = await this.request(
-        'users',
+        `users?${queryParams.toString()}`,
         'GET',
         undefined,
         true // This ensures the auth token is included
@@ -123,17 +128,6 @@ export default class UserAuthService {
     );
     return response;
   }
-
-  // delete admin
-  // static async deleteUser(id: string): Promise<ClientResponse> {
-  //   const response = await this.request(
-  //     `users/deleteMe/${id}`,
-  //     'DELETE',
-  //     undefined,
-  //     true
-  //   );
-  //   return response;
-  // }
 
   static async deleteUser(id: string) {
     const res = await fetch(

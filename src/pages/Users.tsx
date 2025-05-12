@@ -10,40 +10,16 @@ import {
   Check,
   Loader,
   Trash2,
+  Download,
+  FileSpreadsheet,
+  FileText,
 } from 'lucide-react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import * as XLSX from 'xlsx';
 import { useLanguage } from '../contexts/LanguageContext';
 import userService, { Client } from '../services/userService';
 import transactionService from '../services/transactionService';
-
-const mockTransactions = [
-  {
-    id: 1,
-    userId: 1,
-    type: 'credit',
-    amount: 10000,
-    date: '2024-03-15 14:30',
-    description: 'Recharge via Mobile Money',
-    status: 'completed',
-  },
-  {
-    id: 2,
-    userId: 1,
-    type: 'debit',
-    amount: -2500,
-    date: '2024-03-15 15:45',
-    description: 'Session Wi-Fi (Fibre)',
-    status: 'completed',
-  },
-  {
-    id: 3,
-    userId: 1,
-    type: 'credit',
-    amount: 5000,
-    date: '2024-03-14 10:30',
-    description: 'Recharge via Partenaire',
-    status: 'completed',
-  },
-];
 
 export function Users() {
   const { t } = useLanguage();
@@ -52,12 +28,15 @@ export function Users() {
   const [showBlockModal, setShowBlockModal] = useState(false);
   const [showRechargeModal, setShowRechargeModal] = useState(false);
   const [showFilterModal, setShowFilterModal] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState<Client | null>();
   const [rechargeAmount, setRechargeAmount] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [showError, setShowError] = useState(false);
   const [allUsers, setAllUsers] = useState<Client[]>([]);
+  const [totalUsers, setTotalUsers] = useState(0);
+  const [pageSize] = useState(10);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState({
@@ -69,55 +48,53 @@ export function Users() {
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
-  const totalPages = Math.ceil(filteredUsers.length / itemsPerPage);
-  const indexOfLastItem = currentPage * itemsPerPage;
-  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentUsers = filteredUsers.slice(indexOfFirstItem, indexOfLastItem);
 
-  const fetchUsers = async () => {
+  const fetchUsers = async (page: number, filters: any) => {
     try {
       setIsProcessing(true);
-      const response = await userService.getAllClients();
-      setAllUsers(response.data.clients);
-      setFilteredUsers(response.data.clients);
-    } catch (err: any) {
-      // setErrorMessage(err.message || 'Failed to fetch partners');
+      // Build query parameters with proper search fields
+      const queryParams = new URLSearchParams({
+        page: page.toString(),
+        limit: pageSize.toString(),
+        ...(filters.status !== 'all' && {
+          active: (filters.status === 'active').toString(),
+        }),
+        ...(filters.city !== 'all' && { city: filters.city }),
+        ...(searchTerm && {
+          // Add all searchable fields
+          search: searchTerm,
+          searchFields: 'firstName,lastName,phone,email', // Specify the fields to search in
+        }),
+      });
+
+      const response = await userService.getAllClients(queryParams);
+
+      if (response.data && response.data.clients) {
+        setFilteredUsers(response.data.clients);
+        setTotalUsers(response.totals);
+      } else {
+        // Handle empty results
+        setFilteredUsers([]);
+        setTotalUsers(0);
+      }
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      setFilteredUsers([]);
+      setTotalUsers(0);
     } finally {
       setIsProcessing(false);
     }
   };
 
   useEffect(() => {
-    let result = allUsers;
+    // Debounce search term changes
+    const timer = setTimeout(() => {
+      fetchUsers(currentPage, filters);
+    }, 500);
 
-    if (searchTerm) {
-      const searchLower = searchTerm.toLowerCase();
-      result = result.filter(
-        (user) =>
-          user.lastName.toLowerCase().includes(searchLower) ||
-          user.phone.toLowerCase().includes(searchLower) ||
-          user.email.toLowerCase().includes(searchLower)
-      );
-    }
+    return () => clearTimeout(timer);
+  }, [currentPage, filters, searchTerm, pageSize]);
 
-    if (filters.status !== 'all') {
-      result = result.filter(
-        (user) => user.active === (filters.status === 'active')
-      );
-    }
-
-    if (filters.city !== 'all') {
-      result = result.filter((user) => user.city === filters.city);
-    }
-
-    setFilteredUsers(result);
-    setCurrentPage(1); // Reset to first page when filters change
-  }, [searchTerm, filters]);
-
-  useEffect(() => {
-    fetchUsers();
-  }, []);
   const handleShowHistory = (user: any) => {
     setSelectedUser(user);
     setShowHistoryModal(true);
@@ -211,7 +188,7 @@ export function Users() {
         isPartner: false,
       });
 
-      await fetchUsers();
+      await fetchUsers(currentPage, filters);
 
       setIsProcessing(false);
       setShowSuccess(true);
@@ -237,15 +214,122 @@ export function Users() {
     });
   };
 
-  const handlePageChange = (page: any) => {
+  const handlePageChange = (page: number) => {
     setCurrentPage(page);
+    fetchUsers(page, filters);
+  };
+
+  const formatDate = (date: string | Date): string => {
+    const d = new Date(date);
+    if (isNaN(d.getTime())) {
+      return 'N/A';
+    }
+
+    return d.toLocaleString('fr-FR', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      // hour12: true,
+    });
+  };
+
+  const handleExportPDF = () => {
+    try {
+      const doc = new jsPDF();
+
+      // Add title
+      doc.setFontSize(20);
+      doc.text('Liste des Utilisateurs', 14, 22);
+
+      // Add export date
+      doc.setFontSize(11);
+      doc.text(
+        `Exporté le ${new Date().toLocaleDateString(
+          'fr-FR'
+        )} à ${new Date().toLocaleTimeString('fr-FR')}`,
+        14,
+        32
+      );
+
+      // Prepare the data
+      const tableData = filteredUsers.map((user) => [
+        `${user.firstName} ${user.lastName}`,
+        user.phone,
+        user.email,
+        `${user.city}, ${user.country}`,
+        `${user.balance?.toLocaleString()} FCFA`,
+        user.active ? 'Actif' : 'Inactif',
+      ]);
+
+      // Add the table
+      autoTable(doc, {
+        head: [
+          [
+            'Nom complet',
+            'Téléphone',
+            'Email',
+            'Localisation',
+            'Solde',
+            'Statut',
+          ],
+        ],
+        body: tableData,
+        startY: 40,
+        headStyles: {
+          fillColor: [37, 99, 235],
+          textColor: [255, 255, 255],
+          fontSize: 10,
+          fontStyle: 'bold',
+        },
+        bodyStyles: { fontSize: 9 },
+        alternateRowStyles: { fillColor: [249, 250, 251] },
+      });
+
+      doc.save(`utilisateurs_${new Date().toISOString().split('T')[0]}.pdf`);
+      setShowExportModal(false);
+    } catch (error) {
+      console.error('Error exporting PDF:', error);
+    }
+  };
+
+  const handleExportExcel = () => {
+    try {
+      const data = filteredUsers.map((user) => ({
+        Nom: user.firstName,
+        Prénom: user.lastName,
+        Téléphone: user.phone,
+        Email: user.email,
+        Ville: user.city,
+        Pays: user.country,
+        Solde: user.balance,
+        Statut: user.active ? 'Actif' : 'Inactif',
+        'Date inscription': formatDate(user.createdAt!),
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Utilisateurs');
+      XLSX.writeFile(
+        wb,
+        `utilisateurs_${new Date().toISOString().split('T')[0]}.xlsx`
+      );
+      setShowExportModal(false);
+    } catch (error) {
+      console.error('Error exporting Excel:', error);
+    }
   };
 
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-gray-900">{t('users.title')}</h1>
-        <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+        <button
+          onClick={() => setShowExportModal(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          <Download className="w-5 h-5" />
           {t('users.export_data')}
         </button>
       </div>
@@ -257,7 +341,10 @@ export function Users() {
             <input
               type="text"
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setCurrentPage(1); // Reset to first page when searching
+              }}
               placeholder={t('users.search_placeholder')}
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
@@ -296,115 +383,121 @@ export function Users() {
 
       <div className="bg-white rounded-lg shadow-md overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  {t('users.user')}
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  {t('users.contact')}
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  {t('users.location')}
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Solde
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  {t('common.status')}
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  {t('users.last_connection')}
-                </th>
-                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-48">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {currentUsers.map((user) => (
-                <tr key={user._id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center">
-                        <span className="text-gray-600 font-medium">
-                          {user.firstName?.charAt(0)?.toUpperCase()}
-                        </span>
-                      </div>
-                      <div className="ml-4">
-                        <div className="text-sm font-medium text-gray-900">
-                          {user.firstName} {user.lastName}
+          {isProcessing ? (
+            <div className="flex justify-center items-center py-8">
+              <Loader className="w-8 h-8 text-blue-600 animate-spin" />
+            </div>
+          ) : (
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    {t('users.user')}
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    {t('users.contact')}
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    {t('users.location')}
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Solde
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    {t('common.status')}
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    {t('users.last_connection')}
+                  </th>
+                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-48">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {filteredUsers.map((user) => (
+                  <tr key={user._id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center">
+                          <span className="text-gray-600 font-medium">
+                            {user.firstName?.charAt(0)?.toUpperCase()}
+                          </span>
+                        </div>
+                        <div className="ml-4">
+                          <div className="text-sm font-medium text-gray-900">
+                            {user.firstName} {user.lastName}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">{user.phone}</div>
-                    <div className="text-sm text-gray-500">{user.email}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {user.country}
-                    {','} {user.city}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">
-                      {user.balance?.toLocaleString()} FCFA
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span
-                      className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        user.active === true
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-red-100 text-red-800'
-                      }`}
-                    >
-                      {user.active === true
-                        ? t('users.active')
-                        : t('users.inactive')}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {/* TODO lastSeen */}
-                    {/* /{user.lastConnection} */}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex justify-center space-x-2">
-                      <button
-                        onClick={() => handleShowHistory(user)}
-                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-full transition-colors"
-                        title="Historique"
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">{user.phone}</div>
+                      <div className="text-sm text-gray-500">{user.email}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {user.country}
+                      {','} {user.city}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-gray-900">
+                        {user.balance?.toLocaleString()} FCFA
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span
+                        className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                          user.active === true
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-red-100 text-red-800'
+                        }`}
                       >
-                        <History className="w-5 h-5" />
-                      </button>
-                      <button
-                        onClick={() => handleShowRecharge(user)}
-                        className="p-2 text-green-600 hover:bg-green-50 rounded-full transition-colors"
-                        title="Recharger"
-                      >
-                        <Wallet className="w-5 h-5" />
-                      </button>
-                      <button
-                        onClick={() => handleShowBlock(user)}
-                        className="p-2 text-yellow-600 hover:bg-yellow-50 rounded-full transition-colors"
-                        title="Bloquer"
-                      >
-                        <Ban className="w-5 h-5" />
-                      </button>
-                      <button
-                        onClick={() => handleShowDelete(user)}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-full transition-colors"
-                        title="Supprimer"
-                      >
-                        <Trash2 className="w-5 h-5" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                        {user.active === true
+                          ? t('users.active')
+                          : t('users.inactive')}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {/* TODO lastSeen */}
+                      {/* /{user.lastConnection} */}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex justify-center space-x-2">
+                        <button
+                          onClick={() => handleShowHistory(user)}
+                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-full transition-colors"
+                          title="Historique"
+                        >
+                          <History className="w-5 h-5" />
+                        </button>
+                        <button
+                          onClick={() => handleShowRecharge(user)}
+                          className="p-2 text-green-600 hover:bg-green-50 rounded-full transition-colors"
+                          title="Recharger"
+                        >
+                          <Wallet className="w-5 h-5" />
+                        </button>
+                        <button
+                          onClick={() => handleShowBlock(user)}
+                          className="p-2 text-yellow-600 hover:bg-yellow-50 rounded-full transition-colors"
+                          title="Bloquer"
+                        >
+                          <Ban className="w-5 h-5" />
+                        </button>
+                        <button
+                          onClick={() => handleShowDelete(user)}
+                          className="p-2 text-red-600 hover:bg-red-50 rounded-full transition-colors"
+                          title="Supprimer"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
 
         {/* Pagination */}
@@ -413,47 +506,61 @@ export function Users() {
             <div>
               <p className="text-sm text-gray-700">
                 {t('common.showing')}{' '}
-                <span className="font-medium">{indexOfFirstItem + 1}</span>{' '}
+                <span className="font-medium">
+                  {totalUsers === 0 ? 0 : (currentPage - 1) * pageSize + 1}
+                </span>{' '}
                 {t('common.to')}{' '}
                 <span className="font-medium">
-                  {Math.min(indexOfLastItem, filteredUsers.length)}
+                  {Math.min(currentPage * pageSize, totalUsers || 0)}
                 </span>{' '}
                 {t('common.of')}{' '}
-                <span className="font-medium">{filteredUsers.length}</span>{' '}
+                <span className="font-medium">{totalUsers || 0}</span>{' '}
                 {t('common.results')}
               </p>
             </div>
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={() => handlePageChange(currentPage - 1)}
-                disabled={currentPage === 1}
-                className="px-3 py-1 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
-              >
-                {t('common.previous')}
-              </button>
-              <div className="flex space-x-1">
-                {[...Array(totalPages)].map((_, i) => (
-                  <button
-                    key={i + 1}
-                    onClick={() => handlePageChange(i + 1)}
-                    className={`px-3 py-1 border rounded-md text-sm font-medium ${
-                      currentPage === i + 1
-                        ? 'bg-blue-50 text-blue-600 border-blue-500'
-                        : 'text-gray-700 border-gray-300 hover:bg-gray-50'
-                    }`}
-                  >
-                    {i + 1}
-                  </button>
-                ))}
+            {totalUsers > 0 && (
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
+                >
+                  {t('common.previous')}
+                </button>
+                <div className="flex space-x-1">
+                  {Array.from(
+                    { length: Math.ceil((totalUsers || 0) / pageSize) },
+                    (_, i) => i + 1
+                  )
+                    .filter(
+                      (page) =>
+                        page === 1 ||
+                        page === Math.ceil((totalUsers || 0) / pageSize) ||
+                        (page >= currentPage - 1 && page <= currentPage + 1)
+                    )
+                    .map((page) => (
+                      <button
+                        key={page}
+                        onClick={() => handlePageChange(page)}
+                        className={`px-3 py-1 border rounded-md text-sm font-medium ${
+                          currentPage === page
+                            ? 'bg-blue-50 text-blue-600 border-blue-500'
+                            : 'text-gray-700 border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        {page}
+                      </button>
+                    ))}
+                </div>
+                <button
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage * pageSize >= (totalUsers || 0)}
+                  className="px-3 py-1 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
+                >
+                  {t('common.next')}
+                </button>
               </div>
-              <button
-                onClick={() => handlePageChange(currentPage + 1)}
-                disabled={currentPage === totalPages}
-                className="px-3 py-1 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
-              >
-                {t('common.next')}
-              </button>
-            </div>
+            )}
           </div>
         </div>
       </div>
@@ -491,7 +598,7 @@ export function Users() {
                   </select>
                 </div>
 
-                <div>
+                {/* <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Ville
                   </label>
@@ -507,7 +614,7 @@ export function Users() {
                     <option value="Bouaké">Bouaké</option>
                     <option value="Yamoussoukro">Yamoussoukro</option>
                   </select>
-                </div>
+                </div> */}
               </div>
 
               <div className="mt-6 flex space-x-3">
@@ -546,7 +653,7 @@ export function Users() {
             </div>
             <div className="p-6 overflow-y-auto max-h-[60vh]">
               <div className="space-y-4">
-                {mockTransactions.map((transaction) => (
+                {/* {mockTransactions.map((transaction) => (
                   <div
                     key={transaction.id}
                     className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
@@ -580,7 +687,7 @@ export function Users() {
                       {Math.abs(transaction.amount).toLocaleString()} FCFA
                     </div>
                   </div>
-                ))}
+                ))} */}
               </div>
             </div>
             <div className="p-6 border-t border-gray-200 bg-gray-50">
@@ -736,6 +843,43 @@ export function Users() {
                   </div>
                 </>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Export Modal */}
+      {showExportModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg max-w-sm w-full">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-medium">Export des données</h3>
+                <button
+                  onClick={() => setShowExportModal(false)}
+                  className="text-gray-400 hover:text-gray-500"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <button
+                  onClick={handleExportPDF}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                >
+                  <FileText className="w-5 h-5" />
+                  Exporter en PDF
+                </button>
+
+                <button
+                  onClick={handleExportExcel}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  <FileSpreadsheet className="w-5 h-5" />
+                  Exporter en Excel
+                </button>
+              </div>
             </div>
           </div>
         </div>

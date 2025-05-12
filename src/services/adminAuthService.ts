@@ -26,6 +26,23 @@ export type AdminResponseArr = {
   };
 };
 
+export type DashboardData = {
+  totalUsers: number;
+  totalPartners: number;
+  totalTransactions: number;
+  totalRechargeAmount: number;
+};
+
+export type DashboardDataResponse = {
+  status: string;
+  data: {
+    totalUsers: number;
+    totalPartners: number;
+    totalTransactions: number;
+    totalRechargeAmount: number;
+  };
+};
+
 export default class AdminAuthService {
   // private static baseUrl = import.meta.env.VITE_BASEURL;
   private static devBaseUrl = import.meta.env.VITE_DEV_BASEURL;
@@ -132,6 +149,19 @@ export default class AdminAuthService {
       { active },
       true
     );
+    return response;
+  }
+
+  static async getDashboardData(): Promise<DashboardDataResponse> {
+    const response = await this.request(
+      'admin/dashboard',
+      'GET',
+      undefined,
+      true
+    );
+
+    console.log('log response:', response);
+
     return response;
   }
 }

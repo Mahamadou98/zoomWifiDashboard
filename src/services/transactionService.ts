@@ -30,6 +30,7 @@ export type TransactionResponse = {
 };
 export type TransactionResponseArr = {
   status: string;
+  totals: number;
   data: { transactions: TransactionResponse[] };
 };
 
@@ -83,10 +84,12 @@ export default class UserAuthService {
   }
 
   // Get all transactions
-  static async getAllTransaction(): Promise<TransactionResponseArr> {
+  static async getAllTransaction(
+    queryParams: URLSearchParams
+  ): Promise<TransactionResponseArr> {
     try {
       const response = await this.request(
-        'transaction',
+        `transaction?${queryParams.toString()}`,
         'GET',
         undefined,
         true // This ensures the auth token is included

@@ -1,14 +1,14 @@
-import React, { useState } from 'react';
-import { 
-  Users, 
-  Store, 
-  Settings as SettingsIcon, 
-  Plus, 
-  Mail, 
-  Lock, 
-  User, 
-  Phone, 
-  Building, 
+import React, { useEffect, useState } from 'react';
+import {
+  Users,
+  Store,
+  Settings as SettingsIcon,
+  Plus,
+  Mail,
+  Lock,
+  User,
+  Phone,
+  Building,
   Globe2,
   Percent,
   Wifi,
@@ -20,23 +20,27 @@ import {
   Zap,
   X,
   Check,
-  Loader
+  Loader,
 } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { AdminManagement } from '../components/AdminManagement';
+import CompanyService, {
+  Company,
+  CompanyResponse,
+} from '../services/companyService';
 
 const mockSettings = {
   company: {
     name: 'ZOOM WIFI',
     address: 'Rue du Commerce, Plateau',
     city: 'Abidjan',
-    country: 'Côte d\'Ivoire',
+    country: "Côte d'Ivoire",
     phone: '+225 07 00 00 00',
-    email: 'contact@zoomwifi.com'
+    email: 'contact@zoomwifi.com',
   },
   commission: {
     zoomWifi: 40,
-    partner: 60
+    partner: 60,
   },
   captivePortal: {
     fiber: {
@@ -48,8 +52,8 @@ const mockSettings = {
       hourlyDataLimit: 250,
       hourlyCostLimit: 100,
       minimumBalance: 50,
-    }
-  }
+    },
+  },
 };
 
 export function Settings() {
@@ -58,25 +62,39 @@ export function Settings() {
   const [loading, setLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [showError, setShowError] = useState(false);
-  const [companyInfo, setCompanyInfo] = useState(mockSettings.company);
+  const [companyInfo, setCompanyInfo] = useState<Company>();
   const [isEditingCompany, setIsEditingCompany] = useState(false);
 
   const [fiberConfig, setFiberConfig] = useState({
     minBalance: '',
     dataLimit: '',
-    rate: ''
+    rate: '',
   });
 
   const [dataConfig, setDataConfig] = useState({
     minBalance: '',
     dataLimit: '',
-    rate: ''
+    rate: '',
   });
+
+  const [commissionConfig, setCommissionConfig] = useState({
+    zoomWifi: mockSettings.commission.zoomWifi,
+    partner: mockSettings.commission.partner,
+  });
+
+  useEffect(() => {
+    const fetchCompany = async () => {
+      const response = await CompanyService.getAllCompany();
+      setCompanyInfo(response.data.company);
+      // console.log('Company data:', response);
+    };
+    fetchCompany();
+  }, []);
 
   const handleSave = async () => {
     try {
       setLoading(true);
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 3000);
     } catch (error) {
@@ -88,9 +106,16 @@ export function Settings() {
   };
 
   const handleCompanyInfoSave = async () => {
+    console.log('state data', companyInfo);
     try {
       setLoading(true);
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // await new Promise((resolve) => setTimeout(resolve, 1000));
+      const response = await CompanyService.updateCompanyInfos(
+        companyInfo!,
+        companyInfo?._id!
+      );
+
+      console.log('response data:', response);
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 3000);
       setIsEditingCompany(false);
@@ -123,71 +148,135 @@ export function Settings() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700">{t('settings.company_name')}</label>
+              <label className="block text-sm font-medium text-gray-700">
+                {t('settings.company_name')}
+              </label>
               <input
                 type="text"
-                value={companyInfo.name}
-                onChange={(e) => setCompanyInfo({ ...companyInfo, name: e.target.value })}
+                value={companyInfo?.name}
+                onChange={(e) =>
+                  setCompanyInfo({ ...companyInfo!, name: e.target.value })
+                }
                 disabled={!isEditingCompany}
                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm disabled:bg-gray-50 disabled:text-gray-500"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">{t('settings.email')}</label>
+              <label className="block text-sm font-medium text-gray-700">
+                {t('settings.email')}
+              </label>
               <input
                 type="email"
-                value={companyInfo.email}
-                onChange={(e) => setCompanyInfo({ ...companyInfo, email: e.target.value })}
+                value={companyInfo?.email}
+                onChange={(e) =>
+                  setCompanyInfo({ ...companyInfo!, email: e.target.value })
+                }
                 disabled={!isEditingCompany}
                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm disabled:bg-gray-50 disabled:text-gray-500"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">{t('settings.phone')}</label>
+              <label className="block text-sm font-medium text-gray-700">
+                {t('settings.phone')}
+              </label>
               <input
                 type="tel"
-                value={companyInfo.phone}
-                onChange={(e) => setCompanyInfo({ ...companyInfo, phone: e.target.value })}
+                value={companyInfo?.contact}
+                onChange={(e) =>
+                  setCompanyInfo({ ...companyInfo!, contact: e.target.value })
+                }
                 disabled={!isEditingCompany}
                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm disabled:bg-gray-50 disabled:text-gray-500"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">{t('settings.address')}</label>
+              <label className="block text-sm font-medium text-gray-700">
+                {t('settings.address')}
+              </label>
               <input
                 type="text"
-                value={companyInfo.address}
-                onChange={(e) => setCompanyInfo({ ...companyInfo, address: e.target.value })}
+                value={companyInfo?.address}
+                onChange={(e) =>
+                  setCompanyInfo({ ...companyInfo!, address: e.target.value })
+                }
                 disabled={!isEditingCompany}
                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm disabled:bg-gray-50 disabled:text-gray-500"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">{t('settings.city')}</label>
+              <label className="block text-sm font-medium text-gray-700">
+                {t('settings.city')}
+              </label>
               <input
                 type="text"
-                value={companyInfo.city}
-                onChange={(e) => setCompanyInfo({ ...companyInfo, city: e.target.value })}
+                value={companyInfo?.city}
+                onChange={(e) =>
+                  setCompanyInfo({ ...companyInfo!, city: e.target.value })
+                }
                 disabled={!isEditingCompany}
                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm disabled:bg-gray-50 disabled:text-gray-500"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">{t('settings.country')}</label>
+              <label className="block text-sm font-medium text-gray-700">
+                {t('settings.country')}
+              </label>
               <input
                 type="text"
-                value={companyInfo.country}
-                onChange={(e) => setCompanyInfo({ ...companyInfo, country: e.target.value })}
+                value={companyInfo?.country}
+                onChange={(e) =>
+                  setCompanyInfo({ ...companyInfo!, country: e.target.value })
+                }
                 disabled={!isEditingCompany}
                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm disabled:bg-gray-50 disabled:text-gray-500"
               />
+            </div>
+            <div className="p-6">
+              <h2 className="text-lg font-medium text-gray-900 mb-4 flex items-center gap-2">
+                <Percent className="w-5 h-5" />
+                {t('settings.commission_config')}
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-1 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    {t('settings.zoom_commission')}
+                  </label>
+                  <input
+                    type="number"
+                    value={companyInfo?.commissionPercent}
+                    onChange={(e) =>
+                      setCompanyInfo({
+                        ...companyInfo!,
+                        commissionPercent: Number(e.target.value),
+                      })
+                    }
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    {t('settings.partner_share')}
+                  </label>
+                  <input
+                    type="number"
+                    value={companyInfo?.partnerCommissionPercent}
+                    onChange={(e) =>
+                      setCompanyInfo({
+                        ...companyInfo!,
+                        partnerCommissionPercent: Number(e.target.value),
+                      })
+                    }
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                  />
+                </div>
+              </div>
             </div>
           </div>
           {isEditingCompany && (
             <div className="mt-6 flex justify-end gap-3">
               <button
                 onClick={() => {
-                  setCompanyInfo(mockSettings.company);
+                  setCompanyInfo(companyInfo);
                   setIsEditingCompany(false);
                 }}
                 className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
@@ -210,33 +299,6 @@ export function Settings() {
               </button>
             </div>
           )}
-        </div>
-      </div>
-
-      <div className="bg-white rounded-lg shadow-md">
-        <div className="p-6">
-          <h2 className="text-lg font-medium text-gray-900 mb-4 flex items-center gap-2">
-            <Percent className="w-5 h-5" />
-            {t('settings.commission_config')}
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">{t('settings.zoom_commission')}</label>
-              <input
-                type="number"
-                value={mockSettings.commission.zoomWifi}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">{t('settings.partner_share')}</label>
-              <input
-                type="number"
-                value={mockSettings.commission.partner}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-              />
-            </div>
-          </div>
         </div>
       </div>
 
@@ -282,15 +344,19 @@ export function Settings() {
                           <input
                             type="number"
                             value={fiberConfig.minBalance}
-                            onChange={(e) => setFiberConfig({
-                              ...fiberConfig,
-                              minBalance: e.target.value
-                            })}
+                            onChange={(e) =>
+                              setFiberConfig({
+                                ...fiberConfig,
+                                minBalance: e.target.value,
+                              })
+                            }
                             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm pr-12"
                             placeholder="0"
                           />
                           <div className="absolute inset-y-0 right-0 flex items-center pr-3">
-                            <span className="text-gray-500 sm:text-sm">FCFA</span>
+                            <span className="text-gray-500 sm:text-sm">
+                              FCFA
+                            </span>
                           </div>
                         </div>
                       </div>
@@ -303,15 +369,19 @@ export function Settings() {
                           <input
                             type="number"
                             value={fiberConfig.rate}
-                            onChange={(e) => setFiberConfig({
-                              ...fiberConfig,
-                              rate: e.target.value
-                            })}
+                            onChange={(e) =>
+                              setFiberConfig({
+                                ...fiberConfig,
+                                rate: e.target.value,
+                              })
+                            }
                             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm pr-12"
                             placeholder="0"
                           />
                           <div className="absolute inset-y-0 right-0 flex items-center pr-3">
-                            <span className="text-gray-500 sm:text-sm">FCFA</span>
+                            <span className="text-gray-500 sm:text-sm">
+                              FCFA
+                            </span>
                           </div>
                         </div>
                       </div>
@@ -332,15 +402,19 @@ export function Settings() {
                           <input
                             type="number"
                             value={dataConfig.minBalance}
-                            onChange={(e) => setDataConfig({
-                              ...dataConfig,
-                              minBalance: e.target.value
-                            })}
+                            onChange={(e) =>
+                              setDataConfig({
+                                ...dataConfig,
+                                minBalance: e.target.value,
+                              })
+                            }
                             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm pr-12"
                             placeholder="0"
                           />
                           <div className="absolute inset-y-0 right-0 flex items-center pr-3">
-                            <span className="text-gray-500 sm:text-sm">FCFA</span>
+                            <span className="text-gray-500 sm:text-sm">
+                              FCFA
+                            </span>
                           </div>
                         </div>
                       </div>
@@ -353,15 +427,19 @@ export function Settings() {
                           <input
                             type="number"
                             value={dataConfig.rate}
-                            onChange={(e) => setDataConfig({
-                              ...dataConfig,
-                              rate: e.target.value
-                            })}
+                            onChange={(e) =>
+                              setDataConfig({
+                                ...dataConfig,
+                                rate: e.target.value,
+                              })
+                            }
                             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm pr-12"
                             placeholder="0"
                           />
                           <div className="absolute inset-y-0 right-0 flex items-center pr-3">
-                            <span className="text-gray-500 sm:text-sm">FCFA</span>
+                            <span className="text-gray-500 sm:text-sm">
+                              FCFA
+                            </span>
                           </div>
                         </div>
                       </div>
@@ -374,10 +452,12 @@ export function Settings() {
                           <input
                             type="number"
                             value={dataConfig.dataLimit}
-                            onChange={(e) => setDataConfig({
-                              ...dataConfig,
-                              dataLimit: e.target.value
-                            })}
+                            onChange={(e) =>
+                              setDataConfig({
+                                ...dataConfig,
+                                dataLimit: e.target.value,
+                              })
+                            }
                             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm pr-12"
                             placeholder="0"
                           />
@@ -407,8 +487,16 @@ export function Settings() {
                   </button>
                   <button
                     onClick={() => {
-                      setFiberConfig({ minBalance: '', dataLimit: '', rate: '' });
-                      setDataConfig({ minBalance: '', dataLimit: '', rate: '' });
+                      setFiberConfig({
+                        minBalance: '',
+                        dataLimit: '',
+                        rate: '',
+                      });
+                      setDataConfig({
+                        minBalance: '',
+                        dataLimit: '',
+                        rate: '',
+                      });
                     }}
                     disabled={loading}
                     className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
