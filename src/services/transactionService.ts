@@ -35,8 +35,8 @@ export type TransactionResponseArr = {
 };
 
 export default class UserAuthService {
-  // private static baseUrl = import.meta.env.VITE_BASEURL;
-  private static devBaseUrl = import.meta.env.VITE_DEV_BASEURL;
+  private static baseUrl = import.meta.env.VITE_BASEURL;
+  // private static devBaseUrl = import.meta.env.VITE_DEV_BASEURL;
 
   // Helper function to handle requests
   private static async request(
@@ -53,7 +53,7 @@ export default class UserAuthService {
         if (token) headers['Authorization'] = `Bearer ${token}`;
       }
 
-      const response = await fetch(`${this.devBaseUrl}/${endpoint}`, {
+      const response = await fetch(`${this.baseUrl}/${endpoint}`, {
         method,
         headers,
         body: body ? JSON.stringify(body) : undefined,
