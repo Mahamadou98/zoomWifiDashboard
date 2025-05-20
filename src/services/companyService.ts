@@ -6,6 +6,7 @@ export type Company = {
   city: string;
   email: string;
   address: string;
+  balance: number;
   commissionPercent: number;
   partnerCommissionPercent: number;
   createAdAt: string;
@@ -29,7 +30,7 @@ export type CompanyResponseArr = {
 
 export default class CompanyService {
   private static baseUrl = import.meta.env.VITE_BASEURL;
-  // private static devBaseUrl = import.meta.env.VITE_DEV_BASEURL;
+  private static devBaseUrl = import.meta.env.VITE_DEV_BASEURL;
 
   // Helper function to handle requests
   private static async request(
@@ -46,7 +47,7 @@ export default class CompanyService {
         if (token) headers['Authorization'] = `Bearer ${token}`;
       }
 
-      const response = await fetch(`${this.baseUrl}/${endpoint}`, {
+      const response = await fetch(`${this.devBaseUrl}/${endpoint}`, {
         method,
         headers,
         body: body ? JSON.stringify(body) : undefined,

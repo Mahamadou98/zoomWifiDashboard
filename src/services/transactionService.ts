@@ -6,6 +6,12 @@ export type CreateTransaction = {
   description: string;
   isPartner: boolean;
 };
+export type AdminRetrait = {
+  senderId: string;
+  amount: number;
+  type: string;
+  description: string;
+};
 
 type User = {
   _id: string;
@@ -36,7 +42,7 @@ export type TransactionResponseArr = {
 
 export default class UserAuthService {
   private static baseUrl = import.meta.env.VITE_BASEURL;
-  // private static devBaseUrl = import.meta.env.VITE_DEV_BASEURL;
+  private static devBaseUrl = import.meta.env.VITE_DEV_BASEURL;
 
   // Helper function to handle requests
   private static async request(
@@ -53,7 +59,7 @@ export default class UserAuthService {
         if (token) headers['Authorization'] = `Bearer ${token}`;
       }
 
-      const response = await fetch(`${this.baseUrl}/${endpoint}`, {
+      const response = await fetch(`${this.devBaseUrl}/${endpoint}`, {
         method,
         headers,
         body: body ? JSON.stringify(body) : undefined,
@@ -81,6 +87,10 @@ export default class UserAuthService {
       transaction
     );
     return response;
+  }
+
+  static async adminRetrait(retrait: AdminRetrait): Promise<AdminRetrait> {
+    return await this.request('transaction/adminRetrait', 'POST', retrait);
   }
 
   // Get all transactions

@@ -43,6 +43,7 @@ const translations = {
     // Users
     'users.title': 'Gestion des Utilisateurs',
     'users.export_data': 'Exporter les Données',
+    'users.create': 'Ajouter',
     'users.search_placeholder': 'Rechercher un utilisateur...',
     'users.user': 'Utilisateur',
     'users.contact': 'Contact',

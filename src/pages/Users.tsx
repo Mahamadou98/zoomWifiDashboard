@@ -13,30 +13,50 @@ import {
   Download,
   FileSpreadsheet,
   FileText,
+  UserPlus,
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import { useLanguage } from '../contexts/LanguageContext';
-import userService, { Client } from '../services/userService';
+import userService, { Client, Countries } from '../services/userService';
 import transactionService from '../services/transactionService';
 
 export function Users() {
   const { t } = useLanguage();
+  const [isSearching, setIsSearching] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showBlockModal, setShowBlockModal] = useState(false);
   const [showRechargeModal, setShowRechargeModal] = useState(false);
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [showCreateUserModal, setShowCreateUserModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState<Client | null>();
   const [rechargeAmount, setRechargeAmount] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [showError, setShowError] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
   const [allUsers, setAllUsers] = useState<Client[]>([]);
+  const [allCountries, setAllCountries] = useState<Countries[]>([]);
+  const [selectedCountryCities, setSelectedCountryCities] = useState<string[]>(
+    []
+  );
   const [totalUsers, setTotalUsers] = useState(0);
   const [pageSize] = useState(10);
+  const [formData, setFormData] = useState<Client>({
+    _id: '',
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    country: '',
+    city: '',
+    gender: '',
+    password: '',
+    passwordConfirm: '',
+  });
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState({
@@ -87,13 +107,74 @@ export function Users() {
   };
 
   useEffect(() => {
-    // Debounce search term changes
+    const initialFetch = async () => {
+      try {
+        setIsProcessing(false); // Set to false initially
+        await fetchUsers(1, {
+          status: 'all',
+          city: 'all',
+        });
+      } catch (error) {
+        console.error('Error in initial fetch:', error);
+      }
+    };
+    initialFetch();
+  }, []); // Empty dependency array for initial load only
+
+  useEffect(() => {
+    if (showCreateUserModal) return;
+
+    if (!isSearching) return;
+
     const timer = setTimeout(() => {
       fetchUsers(currentPage, filters);
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [currentPage, filters, searchTerm, pageSize]);
+  }, [searchTerm, isSearching, showCreateUserModal, currentPage, filters]);
+
+  // useEffect(() => {
+  //   // if (!isSearching) return;
+
+  //   // Debounce search term changes
+  //   const timer = setTimeout(() => {
+  //     fetchUsers(currentPage, filters);
+  //   }, 500);
+
+  //   return () => clearTimeout(timer);
+  // }, [currentPage, filters, searchTerm, pageSize, isSearching]);
+
+  useEffect(() => {
+    const fetchCountries = async () => {
+      const response = await userService.getAllCountries();
+      setAllCountries(response.data.countries);
+    };
+    fetchCountries();
+  }, []);
+
+  useEffect(() => {
+    const populateCities = async () => {
+      if (formData.country) {
+        try {
+          const selectedCountry = allCountries.find(
+            (country) => country.name === formData.country
+          );
+          if (selectedCountry) {
+            setSelectedCountryCities(selectedCountry.cities || []);
+          } else {
+            setSelectedCountryCities([]);
+          }
+        } catch (error) {
+          console.error('Error fetching cities:', error);
+          setSelectedCountryCities([]);
+        }
+      } else {
+        setSelectedCountryCities([]);
+      }
+    };
+
+    populateCities();
+  }, [formData.country, allCountries]);
 
   const handleShowHistory = (user: any) => {
     setSelectedUser(user);
@@ -120,14 +201,8 @@ export function Users() {
       setIsProcessing(true);
       const newStatus = !selectedUser?.active;
       await userService.activateUser(selectedUser?._id!, newStatus);
+      await fetchUsers(currentPage, filters);
 
-      //Update the local user status
-      const updatedUsers = allUsers.map((user) =>
-        user._id === selectedUser?._id ? { ...user, active: newStatus } : user
-      );
-
-      setAllUsers(updatedUsers);
-      setFilteredUsers(updatedUsers); // Reapply filters if needed
       setShowSuccess(true);
 
       setTimeout(() => {
@@ -146,8 +221,7 @@ export function Users() {
     try {
       setIsProcessing(true);
 
-      const response = await userService.deleteUser(selectedUser?._id!);
-      console.log('response:', response);
+      await userService.deleteUser(selectedUser?._id!);
 
       setAllUsers(allUsers.filter((user) => user._id !== selectedUser!._id));
       setFilteredUsers(
@@ -217,6 +291,15 @@ export function Users() {
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
     fetchUsers(page, filters);
+  };
+
+  const handleCountryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const selectedCountry = e.target.value;
+    setFormData({
+      ...formData,
+      country: selectedCountry,
+      city: '', // Reset city when country changes
+    });
   };
 
   const formatDate = (date: string | Date): string => {
@@ -321,17 +404,93 @@ export function Users() {
     }
   };
 
+  const handleOpenCreateUserModal = () => {
+    setIsSearching(false);
+    setSearchTerm('');
+    setIsProcessing(false);
+    setShowError(false);
+    setShowSuccess(false);
+    // Reset form data
+    setFormData({
+      _id: '',
+      firstName: '',
+      lastName: '',
+      email: '',
+      phone: '',
+      country: '',
+      city: '',
+      gender: '',
+      password: '',
+      passwordConfirm: '',
+    });
+    setShowCreateUserModal(true);
+  };
+
+  async function handleCreateUser() {
+    try {
+      setIsProcessing(true);
+      const response = await userService.register(formData);
+      setShowSuccess(true);
+
+      setFilteredUsers((prevUsers) => [response.data.user, ...prevUsers]);
+      setTotalUsers((prevTotal) => prevTotal + 1);
+
+      setTimeout(() => {
+        setShowSuccess(false);
+        setShowCreateUserModal(false);
+        setFormData({
+          _id: '',
+          firstName: '',
+          lastName: '',
+          email: '',
+          phone: '',
+          country: '',
+          city: '',
+          gender: '',
+          password: '',
+          passwordConfirm: '',
+        });
+      }, 2000);
+    } catch (err) {
+      setErrorMessage('Une erreur est survenue lors de la création');
+      setShowError(true);
+      setTimeout(() => setShowError(false), 3000);
+    } finally {
+      setIsProcessing(false);
+    }
+  }
+
+  // Update the search input handler
+  const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!showCreateUserModal) {
+      // Only perform search if create modal is not open
+      const value = e.target.value;
+      setSearchTerm(value);
+      setCurrentPage(1);
+      setIsSearching(true);
+    }
+  };
+
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-gray-900">{t('users.title')}</h1>
-        <button
-          onClick={() => setShowExportModal(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          <Download className="w-5 h-5" />
-          {t('users.export_data')}
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={handleOpenCreateUserModal}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            <UserPlus className="w-5 h-5" />
+            {t('users.create')}
+          </button>
+          <button
+            onClick={() => setShowExportModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
+          >
+            <Download className="w-5 h-5" />
+            {t('users.export_data')}
+          </button>
+        </div>
       </div>
 
       <div className="bg-white p-4 rounded-lg shadow-md mb-6">
@@ -341,10 +500,7 @@ export function Users() {
             <input
               type="text"
               value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value);
-                setCurrentPage(1); // Reset to first page when searching
-              }}
+              onChange={handleSearch}
               placeholder={t('users.search_placeholder')}
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
@@ -880,6 +1036,222 @@ export function Users() {
                   Exporter en Excel
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* create user Modal */}
+      {showCreateUserModal && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="bg-white rounded-lg max-w-2xl w-full">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium">
+                  {t('settings.new_admin')}
+                </h3>
+                <button
+                  onClick={() => setShowCreateUserModal(false)}
+                  className="text-gray-400 hover:text-gray-500"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {isProcessing ? (
+                <div className="flex flex-col items-center justify-center py-8">
+                  <Loader className="w-8 h-8 text-blue-600 animate-spin" />
+                  <p className="mt-4 text-gray-600">Création en cours...</p>
+                </div>
+              ) : showSuccess ? (
+                <div className="flex flex-col items-center justify-center py-8">
+                  <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center mb-4">
+                    <Check className="w-6 h-6 text-green-600" />
+                  </div>
+                  <p className="text-green-600 font-medium">
+                    client créé avec succès
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {/* User create form */}
+                  <div className="grid grid-cols-2 gap-5">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">
+                        {t('settings.first_name')}
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.firstName}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            firstName: e.target.value,
+                          })
+                        }
+                        className="mt-1 block w-full rounded-md shadow-sm focus:border-green-500 focus:ring-blue-500 sm:text-sm input"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">
+                        {t('settings.last_name')}
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.lastName}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            lastName: e.target.value,
+                          })
+                        }
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm input"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">
+                        Email
+                      </label>
+                      <input
+                        type="email"
+                        value={formData.email}
+                        onChange={(e) =>
+                          setFormData({ ...formData, email: e.target.value })
+                        }
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm input"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">
+                        Phone
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.phone}
+                        onChange={(e) =>
+                          setFormData({ ...formData, phone: e.target.value })
+                        }
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm input"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">
+                        Gender
+                      </label>
+                      <select
+                        value={formData.gender}
+                        onChange={(e) =>
+                          setFormData({ ...formData, gender: e.target.value })
+                        }
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm input"
+                      >
+                        <option value="">Sélectionner un genre</option>
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                        <option value="Autres">Autres...</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">
+                        Pays
+                      </label>
+                      <select
+                        value={formData.country}
+                        onChange={handleCountryChange}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm input"
+                      >
+                        <option value="">Sélectionner un pays</option>
+                        {allCountries.map((country) => (
+                          <option key={country._id} value={country.name}>
+                            {country.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">
+                        Ville
+                      </label>
+                      <select
+                        value={formData.city}
+                        onChange={(e) =>
+                          setFormData({ ...formData, city: e.target.value })
+                        }
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm input"
+                      >
+                        <option value="">Sélectionner une ville</option>
+                        {selectedCountryCities.map((ville) => (
+                          <option key={ville} value={ville}>
+                            {ville}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">
+                        mot de passe
+                      </label>
+                      <input
+                        type="password"
+                        autoComplete="new-password"
+                        value={formData.password}
+                        onChange={(e) =>
+                          setFormData({ ...formData, password: e.target.value })
+                        }
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm input"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">
+                        Confirm mot de passe
+                      </label>
+                      <input
+                        type="password"
+                        autoComplete="new-password"
+                        value={formData.passwordConfirm}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            passwordConfirm: e.target.value,
+                          })
+                        }
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm input"
+                      />
+                    </div>
+                  </div>
+
+                  {showError && (
+                    <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+                      {errorMessage}
+                    </div>
+                  )}
+
+                  <div className="mt-6 flex justify-end gap-3">
+                    <button
+                      onClick={() => setShowCreateUserModal(false)}
+                      className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                    >
+                      {t('settings.cancel')}
+                    </button>
+                    <button
+                      onClick={handleCreateUser}
+                      disabled={
+                        !formData.email ||
+                        !formData.firstName ||
+                        !formData.lastName
+                      }
+                      className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {t('settings.create')}
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>

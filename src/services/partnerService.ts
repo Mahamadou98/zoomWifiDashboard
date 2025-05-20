@@ -13,7 +13,7 @@ export type Partner = {
   password: string;
   passwordConfirm: string;
   active?: boolean;
-  createdAt: string;
+  createdAt?: string;
   balance?: number;
   pendingWithdrawal?: number;
 };
@@ -28,7 +28,7 @@ export type PartnerResponse = {
 
 export default class PartnerService {
   private static baseUrl = import.meta.env.VITE_BASEURL;
-  // private static devBaseUrl = import.meta.env.VITE_DEV_BASEURL;
+  private static devBaseUrl = import.meta.env.VITE_DEV_BASEURL;
 
   // Helper function to handle requests
   private static async request(
@@ -45,7 +45,7 @@ export default class PartnerService {
         if (token) headers['Authorization'] = `Bearer ${token}`;
       }
 
-      const response = await fetch(`${this.baseUrl}/${endpoint}`, {
+      const response = await fetch(`${this.devBaseUrl}/${endpoint}`, {
         method,
         headers,
         body: body ? JSON.stringify(body) : undefined,
@@ -61,6 +61,12 @@ export default class PartnerService {
       console.error(`Error in ${endpoint}:`, error.message);
       throw new Error(error.message);
     }
+  }
+
+  // Register a new Partner
+  static async register(partner: Partner): Promise<PartnerResponse> {
+    const response = await this.request('partner/signup', 'POST', partner);
+    return response;
   }
 
   static async getAllPartners(

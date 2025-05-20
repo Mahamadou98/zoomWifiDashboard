@@ -43,9 +43,14 @@ export type DashboardDataResponse = {
   };
 };
 
+interface DateRange {
+  startDate: string;
+  endDate: string;
+}
+
 export default class AdminAuthService {
   private static baseUrl = import.meta.env.VITE_BASEURL;
-  // private static devBaseUrl = import.meta.env.VITE_DEV_BASEURL;
+  private static devBaseUrl = import.meta.env.VITE_DEV_BASEURL;
 
   // Helper function to handle requests
   private static async request(
@@ -62,7 +67,7 @@ export default class AdminAuthService {
         if (token) headers['Authorization'] = `Bearer ${token}`;
       }
 
-      const response = await fetch(`${this.baseUrl}/${endpoint}`, {
+      const response = await fetch(`${this.devBaseUrl}/${endpoint}`, {
         method,
         headers,
         body: body ? JSON.stringify(body) : undefined,
@@ -142,7 +147,6 @@ export default class AdminAuthService {
     id: string,
     active: boolean
   ): Promise<AdminResponse> {
-    console.log('my args:', id, active);
     const response = await this.request(
       `admin/activateAdmin/${id}`,
       'PATCH',
@@ -152,15 +156,33 @@ export default class AdminAuthService {
     return response;
   }
 
-  static async getDashboardData(): Promise<DashboardDataResponse> {
+  // static async getDashboardData(): Promise<DashboardDataResponse> {
+  //   const response = await this.request(
+  //     'admin/dashboard',
+  //     'GET',
+  //     undefined,
+  //     true
+  //   );
+
+  //   return response;
+  // }
+
+  // Update the getDashboardData method
+
+  static async getDashboardData(
+    dateRange: DateRange
+  ): Promise<DashboardDataResponse> {
+    const queryParams = new URLSearchParams({
+      startDate: dateRange.startDate,
+      endDate: dateRange.endDate,
+    }).toString();
+
     const response = await this.request(
-      'admin/dashboard',
+      `admin/dashboard?${queryParams}`,
       'GET',
       undefined,
       true
     );
-
-    console.log('log response:', response);
 
     return response;
   }

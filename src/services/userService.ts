@@ -15,6 +15,21 @@ export type Client = {
   createdAt?: string;
 };
 
+export type Countries = {
+  _id?: string;
+  name: string;
+  tarifFibrePerMinute: 0;
+  tarifDataPerMo: 0;
+  cities: string[];
+};
+
+export type CountryResponse = {
+  status: string;
+  data: {
+    countries: Countries[];
+  };
+};
+
 export type ClientResponse = {
   status: string;
   token: string;
@@ -34,7 +49,7 @@ export type ClientResponseArr = {
 
 export default class UserAuthService {
   private static baseUrl = import.meta.env.VITE_BASEURL;
-  // private static devBaseUrl = import.meta.env.VITE_DEV_BASEURL;
+  private static devBaseUrl = import.meta.env.VITE_DEV_BASEURL;
 
   // Helper function to handle requests
   private static async request(
@@ -51,7 +66,7 @@ export default class UserAuthService {
         if (token) headers['Authorization'] = `Bearer ${token}`;
       }
 
-      const response = await fetch(`${this.baseUrl}/${endpoint}`, {
+      const response = await fetch(`${this.devBaseUrl}/${endpoint}`, {
         method,
         headers,
         body: body ? JSON.stringify(body) : undefined,
@@ -67,6 +82,12 @@ export default class UserAuthService {
       console.error(`Error in ${endpoint}:`, error.message);
       throw new Error(error.message);
     }
+  }
+
+  // Register a new client
+  static async register(client: Client): Promise<ClientResponse> {
+    const response = await this.request('users/signup', 'POST', client);
+    return response;
   }
 
   static async getAllClients(
@@ -119,7 +140,6 @@ export default class UserAuthService {
     id: string,
     active: boolean
   ): Promise<ClientResponse> {
-    console.log('my args:', id, active);
     const response = await this.request(
       `users/updateClientStatus/${id}`,
       'PATCH',
@@ -130,14 +150,32 @@ export default class UserAuthService {
   }
 
   static async deleteUser(id: string) {
-    const res = await fetch(`${UserAuthService.baseUrl}/users/deleteMe/${id}`, {
-      method: 'DELETE',
-    });
+    const res = await fetch(
+      `${UserAuthService.devBaseUrl}/users/deleteMe/${id}`,
+      {
+        method: 'DELETE',
+      }
+    );
 
     if (!res.ok) throw new Error(`Failed to delete user ${id}`);
 
     // Only try to parse JSON if there is content
     const text = await res.text();
     return text ? JSON.parse(text) : null;
+  }
+
+  static async getAllCountries(): Promise<CountryResponse> {
+    try {
+      const response = await this.request(
+        `users/countries`,
+        'GET',
+        undefined,
+        true // This ensures the auth token is included
+      );
+
+      return response;
+    } catch (error) {
+      throw error;
+    }
   }
 }

@@ -16,6 +16,8 @@ import {
   Download,
   FileSpreadsheet,
   FileText,
+  Store,
+  Check,
 } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import PartnerService, { Partner } from '../services/partnerService';
@@ -23,6 +25,7 @@ import transactionService from '../services/transactionService';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
+import userService, { Countries } from '../services/userService';
 
 export function Partners() {
   const { t } = useLanguage();
@@ -30,12 +33,33 @@ export function Partners() {
   const [showDeactivateModal, setShowDeactivateModal] = useState(false);
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [showTopupModal, setShowTopupModal] = useState(false);
-  const [selectedPartner, setSelectedPartner] = useState<Partner | null>(null);
   const [topupAmount, setTopupAmount] = useState('');
+  const [selectedPartner, setSelectedPartner] = useState<Partner | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [showError, setShowError] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [showCreatePartnerModal, setShowCreatePartnerModal] = useState(false);
+  const [allCountries, setAllCountries] = useState<Countries[]>([]);
+  const [selectedCountryCities, setSelectedCountryCities] = useState<string[]>(
+    []
+  );
+  const [errorMessage, setErrorMessage] = useState('');
+  const [formData, setFormData] = useState<Partner>({
+    _id: '',
+    establishmentName: '',
+    managerFirstName: '',
+    managerLastName: '',
+    establishmentType: '',
+    email: '',
+    phone: '',
+    country: '',
+    city: '',
+    address: '',
+    connectionType: '',
+    password: '',
+    passwordConfirm: '',
+  });
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState({
@@ -112,6 +136,38 @@ export function Partners() {
 
     return () => clearTimeout(timer);
   }, [currentPage, filters, searchTerm, pageSize]);
+
+  useEffect(() => {
+    const populateCities = async () => {
+      if (formData.country) {
+        try {
+          const selectedCountry = allCountries.find(
+            (country) => country.name === formData.country
+          );
+          if (selectedCountry) {
+            setSelectedCountryCities(selectedCountry.cities || []);
+          } else {
+            setSelectedCountryCities([]);
+          }
+        } catch (error) {
+          console.error('Error fetching cities:', error);
+          setSelectedCountryCities([]);
+        }
+      } else {
+        setSelectedCountryCities([]);
+      }
+    };
+
+    populateCities();
+  }, [formData.country, allCountries]);
+
+  useEffect(() => {
+    const fetchCountries = async () => {
+      const response = await userService.getAllCountries();
+      setAllCountries(response.data.countries);
+    };
+    fetchCountries();
+  }, []);
 
   const handleValidatePartner = (partner: Partner) => {
     setSelectedPartner(partner);
@@ -365,7 +421,7 @@ export function Partners() {
         Solde: partner.balance,
         'Retrait en attente': partner.pendingWithdrawal || 0,
         Statut: partner.active ? 'Actif' : 'Inactif',
-        'Date inscription': formatDate(partner.createdAt),
+        'Date inscription': formatDate(partner.createdAt!),
       }));
 
       const ws = XLSX.utils.json_to_sheet(data);
@@ -381,6 +437,49 @@ export function Partners() {
     }
   };
 
+  const handleCountryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const selectedCountry = e.target.value;
+    setFormData({
+      ...formData,
+      country: selectedCountry,
+      city: '', // Reset city when country changes
+    });
+  };
+
+  async function handleCreatePartner() {
+    try {
+      setIsProcessing(true);
+      const response = await PartnerService.register(formData);
+      setShowSuccess(true);
+      await fetchPartners(currentPage, filters);
+      setTimeout(() => {
+        setShowSuccess(false);
+        setShowCreatePartnerModal(false);
+        setFormData({
+          _id: '',
+          establishmentName: '',
+          managerFirstName: '',
+          managerLastName: '',
+          establishmentType: '',
+          email: '',
+          phone: '',
+          country: '',
+          city: '',
+          address: '',
+          connectionType: '',
+          password: '',
+          passwordConfirm: '',
+        });
+      }, 2000);
+    } catch (err) {
+      setErrorMessage('Une erreur est survenue lors de la création');
+      setShowError(true);
+      setTimeout(() => setShowError(false), 3000);
+    } finally {
+      setIsProcessing(false);
+    }
+  }
+
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
@@ -388,13 +487,22 @@ export function Partners() {
           {t('partners.title')}
         </h1>
         <div className="flex gap-2">
-          <button
-            onClick={() => setShowExportModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            <Download className="w-5 h-5" />
-            {t('partners.export_data')}
-          </button>
+          <div className="flex gap-3">
+            <button
+              onClick={() => setShowCreatePartnerModal(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              <Store className="w-5 h-5" />
+              {t('users.create')}
+            </button>
+            <button
+              onClick={() => setShowExportModal(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
+            >
+              <Download className="w-5 h-5" />
+              {t('partners.export_data')}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -485,7 +593,7 @@ export function Partners() {
                         </h2>
                         <p className="text-sm text-gray-500">
                           {t('partners.registered_on')}{' '}
-                          {formatDate(partner.createdAt)}
+                          {formatDate(partner.createdAt!)}
                         </p>
                       </div>
                       {partner.active === true ? (
@@ -950,6 +1058,286 @@ export function Partners() {
                   Exporter en Excel
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* create user Modal */}
+      {showCreatePartnerModal && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="bg-white rounded-lg max-w-2xl w-full">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium">
+                  {t('settings.new_admin')}
+                </h3>
+                <button
+                  onClick={() => setShowCreatePartnerModal(false)}
+                  className="text-gray-400 hover:text-gray-500"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {isProcessing ? (
+                <div className="flex flex-col items-center justify-center py-8">
+                  <Loader className="w-8 h-8 text-blue-600 animate-spin" />
+                  <p className="mt-4 text-gray-600">Création en cours...</p>
+                </div>
+              ) : showSuccess ? (
+                <div className="flex flex-col items-center justify-center py-8">
+                  <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center mb-4">
+                    <Check className="w-6 h-6 text-green-600" />
+                  </div>
+                  <p className="text-green-600 font-medium">
+                    client créé avec succès
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {/* User create form */}
+                  <div className="grid grid-cols-2 gap-5">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">
+                        Nom de l'etablisement
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.establishmentName}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            establishmentName: e.target.value,
+                          })
+                        }
+                        className="mt-1 block w-full rounded-md shadow-sm focus:border-green-500 focus:ring-blue-500 sm:text-sm input"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">
+                        Prenom du managere
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.managerFirstName}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            managerFirstName: e.target.value,
+                          })
+                        }
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm input"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">
+                        Nom du managere
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.managerLastName}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            managerLastName: e.target.value,
+                          })
+                        }
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm input"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">
+                        Type d'etablisement:
+                      </label>
+                      <select
+                        value={formData.establishmentType}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            establishmentType: e.target.value,
+                          })
+                        }
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm input"
+                      >
+                        <option value="">Sélectionner un genre</option>
+                        <option value="hotel">Hôtel</option>
+                        <option value="restaurant">Restaurant</option>
+                        <option value="cafe">Café</option>
+                        <option value="mall">Centre commercial</option>
+                        <option value="office">Bureau</option>
+                        <option value="other">Autres...</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">
+                        Email
+                      </label>
+                      <input
+                        type="email"
+                        value={formData.email}
+                        onChange={(e) =>
+                          setFormData({ ...formData, email: e.target.value })
+                        }
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm input"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">
+                        Phone
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.phone}
+                        onChange={(e) =>
+                          setFormData({ ...formData, phone: e.target.value })
+                        }
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm input"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">
+                        Pays
+                      </label>
+                      <select
+                        value={formData.country}
+                        onChange={handleCountryChange}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm input"
+                      >
+                        <option value="">Sélectionner un pays</option>
+                        {allCountries.map((country) => (
+                          <option key={country._id} value={country.name}>
+                            {country.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">
+                        Ville
+                      </label>
+                      <select
+                        value={formData.city}
+                        onChange={(e) =>
+                          setFormData({ ...formData, city: e.target.value })
+                        }
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm input"
+                      >
+                        <option value="">Sélectionner une ville</option>
+                        {selectedCountryCities.map((ville) => (
+                          <option key={ville} value={ville}>
+                            {ville}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">
+                        Address
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.address}
+                        onChange={(e) =>
+                          setFormData({ ...formData, address: e.target.value })
+                        }
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm input"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">
+                        Type de connection
+                      </label>
+                      <select
+                        value={formData.connectionType}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            connectionType: e.target.value,
+                          })
+                        }
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm input"
+                      >
+                        <option value="">Sélectionner un genre</option>
+                        <option value="fibre">Fibre</option>
+                        <option value="data">Data</option>
+                        <option value="both">Les deux</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">
+                        mot de passe
+                      </label>
+                      <input
+                        type="password"
+                        autoComplete="new-password"
+                        value={formData.password}
+                        onChange={(e) =>
+                          setFormData({ ...formData, password: e.target.value })
+                        }
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm input"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">
+                        Confirm mot de passe
+                      </label>
+                      <input
+                        type="password"
+                        autoComplete="new-password"
+                        value={formData.passwordConfirm}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            passwordConfirm: e.target.value,
+                          })
+                        }
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm input"
+                      />
+                    </div>
+                  </div>
+
+                  {showError && (
+                    <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+                      {errorMessage}
+                    </div>
+                  )}
+
+                  <div className="mt-6 flex justify-end gap-3">
+                    <button
+                      onClick={() => setShowCreatePartnerModal(false)}
+                      className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                    >
+                      {t('settings.cancel')}
+                    </button>
+                    <button
+                      onClick={handleCreatePartner}
+                      disabled={
+                        !formData.email ||
+                        !formData.establishmentName ||
+                        !formData.managerFirstName ||
+                        !formData.managerLastName ||
+                        !formData.country ||
+                        !formData.connectionType ||
+                        !formData.password ||
+                        !formData.passwordConfirm
+                      }
+                      className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {t('settings.create')}
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
