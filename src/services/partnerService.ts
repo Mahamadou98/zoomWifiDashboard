@@ -45,7 +45,7 @@ export default class PartnerService {
         if (token) headers['Authorization'] = `Bearer ${token}`;
       }
 
-      const response = await fetch(`${this.devBaseUrl}/${endpoint}`, {
+      const response = await fetch(`${this.baseUrl}/${endpoint}`, {
         method,
         headers,
         body: body ? JSON.stringify(body) : undefined,

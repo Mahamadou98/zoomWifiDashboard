@@ -66,7 +66,7 @@ export default class UserAuthService {
         if (token) headers['Authorization'] = `Bearer ${token}`;
       }
 
-      const response = await fetch(`${this.devBaseUrl}/${endpoint}`, {
+      const response = await fetch(`${this.baseUrl}/${endpoint}`, {
         method,
         headers,
         body: body ? JSON.stringify(body) : undefined,
@@ -150,12 +150,9 @@ export default class UserAuthService {
   }
 
   static async deleteUser(id: string) {
-    const res = await fetch(
-      `${UserAuthService.devBaseUrl}/users/deleteMe/${id}`,
-      {
-        method: 'DELETE',
-      }
-    );
+    const res = await fetch(`${UserAuthService.baseUrl}/users/deleteMe/${id}`, {
+      method: 'DELETE',
+    });
 
     if (!res.ok) throw new Error(`Failed to delete user ${id}`);
 
