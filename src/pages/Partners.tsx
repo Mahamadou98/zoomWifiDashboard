@@ -41,6 +41,7 @@ export function Partners() {
   const [showExportModal, setShowExportModal] = useState(false);
   const [showCreatePartnerModal, setShowCreatePartnerModal] = useState(false);
   const [allCountries, setAllCountries] = useState<Countries[]>([]);
+  const [allCities, setAllCities] = useState<any[]>([]);
   const [selectedCountryCities, setSelectedCountryCities] = useState<string[]>(
     []
   );
@@ -165,6 +166,16 @@ export function Partners() {
     const fetchCountries = async () => {
       const response = await userService.getAllCountries();
       setAllCountries(response.data.countries);
+
+      const allCitiesSet = new Set<string>();
+      response.data.countries.forEach((country) => {
+        country.cities?.forEach((city) => {
+          allCitiesSet.add(city);
+        });
+      });
+
+      const allCitiesList = Array.from(allCitiesSet).sort();
+      setAllCities(allCitiesList);
     };
     fetchCountries();
   }, []);
@@ -184,10 +195,8 @@ export function Partners() {
       const newStatus = !selectedPartner?.active;
       setIsProcessing(true);
 
-      // // Simulate API call
-      // await new Promise((resolve) => setTimeout(resolve, 1500));
       await PartnerService.updatePartnerStatus(selectedPartner!._id, newStatus);
-
+      setShowSuccess(true);
       const updatedPartners = allPartners.map((partner) =>
         partner._id === selectedPartner?._id
           ? { ...partner, active: newStatus }
@@ -196,10 +205,6 @@ export function Partners() {
 
       setAllPartners(updatedPartners);
       setFilteredPartners(updatedPartners); // Reapply filters if needed
-      setShowSuccess(true);
-
-      setFilteredPartners(updatedPartners);
-      setShowSuccess(true);
 
       setTimeout(() => {
         setShowSuccess(false);
@@ -218,9 +223,11 @@ export function Partners() {
   const handleDeactivate = async () => {
     try {
       const newStatus = !selectedPartner?.active;
-      setShowDeactivateModal(false);
+      setIsProcessing(true);
 
       await PartnerService.updatePartnerStatus(selectedPartner!._id, newStatus);
+      setShowSuccess(true);
+      setShowDeactivateModal(false);
       const updatedPartners = allPartners.map((partner) =>
         partner._id === selectedPartner?._id
           ? { ...partner, active: newStatus }
@@ -229,11 +236,16 @@ export function Partners() {
 
       setAllPartners(updatedPartners);
       setFilteredPartners(updatedPartners); // Reapply filters if needed
-      setShowSuccess(true);
 
-      setSelectedPartner(null);
+      setTimeout(() => {
+        setShowSuccess(false);
+        setShowDeactivateModal(false);
+        setSelectedPartner(null);
+      }, 2000);
     } catch (error) {
       console.error('Error deactivating partner:', error);
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -967,6 +979,26 @@ export function Partners() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Ville
+                  </label>
+                  <select
+                    value={filters.city}
+                    onChange={(e) =>
+                      setFilters({ ...filters, city: e.target.value })
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="all">Toutes les villes</option>
+                    {allCities.map((city) => (
+                      <option key={city} value={city}>
+                        {city}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
                     Solde
                   </label>
                   <select
@@ -977,11 +1009,9 @@ export function Partners() {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="all">Tous les soldes</option>
-                    <option value="low">Moins de 100 000 FCFA</option>
-                    <option value="medium">
-                      Entre 100 000 et 500 000 FCFA
-                    </option>
-                    <option value="high">Plus de 500 000 FCFA</option>
+                    <option value="low">{'< 100,000 FCFA'}</option>
+                    <option value="medium">100,000 - 500,000 FCFA</option>
+                    <option value="high">{'> 500,000 FCFA'}</option>
                   </select>
                 </div>
 
@@ -996,11 +1026,11 @@ export function Partners() {
                         pendingWithdrawal: e.target.checked,
                       })
                     }
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                   />
                   <label
                     htmlFor="pendingWithdrawal"
-                    className="ml-2 block text-sm text-gray-900"
+                    className="ml-2 block text-sm text-gray-700"
                   >
                     Retrait en attente
                   </label>

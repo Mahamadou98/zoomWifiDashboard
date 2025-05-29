@@ -93,11 +93,13 @@ export default class PartnerService {
       const response = await this.request(
         `partner/${partnerId}/status`,
         'PATCH',
-        { active },
-        true // requiresAuth = true since this is a protected endpoint
+        { active: active }, // explicitly specify the property name and value
+        true
       );
-      return response.data.partner;
+      // The response might be just the partner object directly
+      return response.partner || response.data?.partner || response;
     } catch (error) {
+      console.error('Error updating partner status:', error);
       throw error;
     }
   }

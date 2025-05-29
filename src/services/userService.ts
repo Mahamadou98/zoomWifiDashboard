@@ -12,6 +12,8 @@ export type Client = {
   active?: boolean;
   role?: string;
   balance?: number;
+  transactions?: any[];
+  connections?: any[];
   createdAt?: string;
 };
 
@@ -93,7 +95,6 @@ export default class UserAuthService {
   static async getAllClients(
     queryParams: URLSearchParams
   ): Promise<ClientResponseArr> {
-    //  return axios.get(`${API_URL}/users?${queryParams.toString()}`);
     try {
       const response = await this.request(
         `users?${queryParams.toString()}`,

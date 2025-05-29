@@ -63,7 +63,7 @@ export function Users() {
     status: 'all',
     city: 'all',
   });
-  // const [filteredUsers, setFilteredUsers] = useState(mockUsers);
+
   const [filteredUsers, setFilteredUsers] = useState<Client[]>([]);
 
   // Pagination
@@ -177,6 +177,7 @@ export function Users() {
   }, [formData.country, allCountries]);
 
   const handleShowHistory = (user: any) => {
+    console.log('user historic', user);
     setSelectedUser(user);
     setShowHistoryModal(true);
   };
@@ -809,41 +810,91 @@ export function Users() {
             </div>
             <div className="p-6 overflow-y-auto max-h-[60vh]">
               <div className="space-y-4">
-                {/* {mockTransactions.map((transaction) => (
+                <h5 className="text-center text-gray-600 text-base font-medium mb-4">
+                  Historique des transactions
+                </h5>
+                {selectedUser.transactions!.map((transaction) => (
                   <div
-                    key={transaction.id}
+                    key={transaction._id}
                     className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
                   >
                     <div className="flex items-start space-x-4">
                       <div
                         className={`p-2 rounded-full ${
-                          transaction.type === 'credit'
+                          transaction.status === 'rejete'
+                            ? 'bg-red-200 text-red-600'
+                            : transaction.type === 'topup'
                             ? 'bg-green-100 text-green-600'
                             : 'bg-red-100 text-red-600'
                         }`}
                       >
-                        {transaction.type === 'credit' ? '+' : '-'}
+                        {transaction.status === 'rejete'
+                          ? 'x'
+                          : transaction.type === 'topup'
+                          ? '+'
+                          : '-'}
                       </div>
                       <div>
                         <p className="font-medium text-gray-900">
                           {transaction.description}
                         </p>
                         <p className="text-sm text-gray-500">
-                          {transaction.date}
+                          {formatDate(transaction.createdAt)}
                         </p>
                       </div>
                     </div>
                     <div
                       className={`font-medium ${
-                        transaction.type === 'credit'
+                        transaction.type === 'topup' &&
+                        transaction.status !== 'rejete'
                           ? 'text-green-600'
                           : 'text-red-600'
                       }`}
                     >
-                      {Math.abs(transaction.amount).toLocaleString()} FCFA
+                      {Math.abs(transaction.balance).toLocaleString()} FCFA
                     </div>
                   </div>
-                ))} */}
+                ))}
+                <h5 className="text-center text-gray-600 text-base font-medium mb-4">
+                  Historique des connexions
+                </h5>
+                {selectedUser.connections!.map((connection) => (
+                  <div
+                    key={connection._id}
+                    className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
+                  >
+                    <div className="flex items-start space-x-4">
+                      <div className="p-2 rounded-full bg-blue-100 text-blue-600">
+                        <FileText className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-900">
+                          Connexion le {formatDate(connection.createdAt)}
+                        </p>
+                        <p className="text-sm text-gray-500 w-10/12">
+                          {selectedUser.firstName} a utilisé le wifi
+                          <span className="font-semibold">
+                            {' '}
+                            {connection.establishmentName}
+                          </span>
+                          du type{' '}
+                          <span className="font-semibold">
+                            {' '}
+                            {connection.connectionType}{' '}
+                          </span>
+                          pour une durée de{' '}
+                          <span className="font-semibold">
+                            {' '}
+                            {connection.connectionDuration}
+                          </span>
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-sm text-gray-500">
+                      {connection.cost} FCFA
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
             <div className="p-6 border-t border-gray-200 bg-gray-50">
