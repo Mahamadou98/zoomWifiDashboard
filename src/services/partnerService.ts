@@ -64,9 +64,40 @@ export default class PartnerService {
   }
 
   // Register a new Partner
+  // static async register(partner: Partner): Promise<PartnerResponse> {
+  //   const response = await this.request('partner/signup', 'POST', partner);
+  //   return response;
+  // }
   static async register(partner: Partner): Promise<PartnerResponse> {
-    const response = await this.request('partner/signup', 'POST', partner);
-    return response;
+    try {
+      const response = await this.request('partner/signup', 'POST', partner);
+      return response;
+    } catch (error: any) {
+      // Check for connection reset error
+      if (error.message.includes('ECONNRESET')) {
+        throw new Error(
+          'La connexion au serveur a été perdue. Veuillez réessayer.'
+        );
+      }
+
+      // Check if it's a network error
+      if (!navigator.onLine) {
+        throw new Error(
+          'Pas de connexion internet. Veuillez vérifier votre connexion.'
+        );
+      }
+
+      // Log the error for debugging
+      console.error('Partner registration error:', {
+        error,
+        partner: { ...partner, password: '[REDACTED]' },
+      });
+
+      // Re-throw the error with a user-friendly message
+      throw new Error(
+        error.message || "Erreur lors de l'inscription du partenaire"
+      );
+    }
   }
 
   static async getAllPartners(
