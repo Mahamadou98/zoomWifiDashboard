@@ -574,7 +574,7 @@ export function Transactions() {
                     <CheckCircle className="w-6 h-6 text-green-600" />
                   </div>
                   <p className="text-green-600 font-medium">
-                    Retrait validé avec succès
+                    Recharge validé avec succès
                   </p>
                 </div>
               ) : showError ? (
